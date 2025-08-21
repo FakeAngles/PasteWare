@@ -336,8 +336,10 @@ local WarTycoonBox = ExploitTab:AddLeftGroupbox("War Tycoon")
 local ACSEngineBox = ExploitTab:AddRightGroupbox("weapon settings")
 local VisualsTab = Window:AddTab("Visuals")
 local settingsTab = Window:AddTab("Settings")
-
-
+local MenuGroup = settingsTab:AddLeftGroupbox("Menu")
+MenuGroup:AddButton("Unload", function() Library:Unload() end)
+MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "End", NoUI = true, Text = "Menu keybind" })
+Library.ToggleKeybind = Options.MenuKeybind
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 ThemeManager:ApplyToTab(settingsTab)
@@ -493,7 +495,6 @@ velbox:AddSlider("ReverseResolveIntensity", {
         reverseResolveIntensity = value
     end
 })
-
 
 
 local antiLockEnabled = false
@@ -744,39 +745,142 @@ local function removeOldHighlight()
     end
 end
 
-resume(create(function()
+task.spawn(function()
     RenderStepped:Connect(function()
         if Toggles.MousePosition.Value then
             local closestPlayer = getClosestPlayer()
             if closestPlayer then 
-                local Root = closestPlayer.Parent.PrimaryPart or closestPlayer
-                local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
-                removeOldHighlight()
-                if IsOnScreen then
-                    local highlight = closestPlayer.Parent:FindFirstChildOfClass("Highlight")
-                    if not highlight then
-                        highlight = Instance.new("Highlight")
-                        highlight.Parent = closestPlayer.Parent
-                        highlight.Adornee = closestPlayer.Parent
+                local char = closestPlayer.Parent
+                if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
+                    if Toggles.TeamCheck.Value and closestPlayer:IsA("Player") and closestPlayer.Team == LocalPlayer.Team then
+                        removeOldHighlight()
+                        return
                     end
-                    highlight.FillColor = Options.MouseVisualizeColor.Value
-                    highlight.FillTransparency = 0.5
-                    highlight.OutlineColor = Options.MouseVisualizeColor.Value
-                    highlight.OutlineTransparency = 0
-                    previousHighlight = highlight
+                    local Root = char.PrimaryPart or char:FindFirstChild("HumanoidRootPart")
+                    if Root then
+                        local RootToViewportPoint, IsOnScreen = WorldToViewportPoint(Camera, Root.Position)
+                        removeOldHighlight()
+                        if IsOnScreen then
+                            local highlight = char:FindFirstChildOfClass("Highlight")
+                            if not highlight then
+                                highlight = Instance.new("Highlight")
+                                highlight.Parent = char
+                                highlight.Adornee = char
+                            end
+                            highlight.FillColor = Options.MouseVisualizeColor.Value
+                            highlight.FillTransparency = 0.5
+                            highlight.OutlineColor = Options.MouseVisualizeColor.Value
+                            highlight.OutlineTransparency = 0
+                            previousHighlight = highlight
+                        end
+                    end
                 end
             else 
                 removeOldHighlight()
             end
         end
-        
         if Toggles.Visible.Value then 
             fov_circle.Visible = Toggles.Visible.Value
             fov_circle.Color = Options.Color.Value
             fov_circle.Position = getMousePosition()
         end
     end)
-end))
+end)
+
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local SoundService = game:GetService("SoundService")
+
+local sounds = {
+    ["RIFK7"] = "rbxassetid://9102080552",
+    ["Bubble"] = "rbxassetid://9102092728",
+    ["Minecraft"] = "rbxassetid://5869422451",
+    ["Cod"] = "rbxassetid://160432334",
+    ["Bameware"] = "rbxassetid://6565367558",
+    ["Neverlose"] = "rbxassetid://6565370984",
+    ["Gamesense"] = "rbxassetid://4817809188",
+    ["Rust"] = "rbxassetid://6565371338",
+}
+
+local hitSound = Instance.new("Sound")
+hitSound.Volume = 3
+hitSound.Parent = SoundService
+
+local HitSoundBox = GeneralTab:AddRightTabbox("HitSound") do
+    local Main = HitSoundBox:AddTab("HitSound [beta]")
+
+    Main:AddToggle("HitSoundEnabled", {Text = "Enable HitSound", Default = true})
+
+    Main:AddDropdown("HitSoundSelect", {
+        Values = {"RIFK7","Bubble","Minecraft","Cod","Bameware","Neverlose","Gamesense","Rust"},
+        Default = "Neverlose",
+        Text = "HitSound",
+        Tooltip = "Choose sound"
+    }):OnChanged(function()
+        local id = sounds[Options.HitSoundSelect.Value]
+        if id then
+            hitSound.SoundId = id
+        end
+    end)
+end
+
+hitSound.SoundId = sounds[Options.HitSoundSelect.Value]
+
+
+local soundPool = {}
+local soundIndex = 1
+
+local function getNextSound()
+    if soundIndex > #soundPool then
+        local s = hitSound:Clone()
+        s.Parent = workspace
+        s.Looped = false
+        table.insert(soundPool, s)
+    end
+    local s = soundPool[soundIndex]
+    soundIndex = soundIndex + 1
+    return s
+end
+
+local function playHitSound()
+    local s = getNextSound()
+    s:Stop()
+    s:Play()
+end
+
+local function trackPlayer(plr)
+    if plr == LocalPlayer then return end
+
+    plr.CharacterAdded:Connect(function(char)
+        local hum = char:WaitForChild("Humanoid", 10)
+        if not hum then return end
+
+        local lastHealth = hum.Health
+
+        hum.HealthChanged:Connect(function(newHp)
+            if Toggles.HitSoundEnabled.Value then
+                local closest = getClosestPlayer()
+                if closest and closest.Parent == char then
+                    if newHp < lastHealth then
+                        playHitSound()
+                    end
+                    if lastHealth > 0 and newHp <= 0 then
+                        playHitSound()
+                    end
+                end
+            end
+            lastHealth = newHp
+        end)
+    end)
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do
+    trackPlayer(plr)
+end
+Players.PlayerAdded:Connect(trackPlayer)
+
+
 
 
 local oldNamecall
@@ -860,300 +964,6 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
 
     return oldNamecall(...)
 end))
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Camera = workspace.CurrentCamera
-
-local BOXEnabled, TRAEnabled, NameTagsEnabled, teamCheckEnabled = false, false, false, false
-local espBoxes, espTracers, espNameTags = {}, {}, {}
-local boxColor, tracerColor, nameTagColor = Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 255, 255)
-
-local function createESPBox(color)
-    local box = Drawing.new("Square")
-    box.Color, box.Thickness, box.Filled, box.Visible = color, 1, false, false
-    return box
-end
-
-local function createTracer(color)
-    local tracer = Drawing.new("Line")
-    tracer.Color, tracer.Thickness, tracer.Visible = color, 2, false
-    return tracer
-end
-
-local function createNameTag(color, text)
-    local nameTag = Drawing.new("Text")
-    nameTag.Color, nameTag.Text, nameTag.Size, nameTag.Center, nameTag.Outline, nameTag.OutlineColor, nameTag.Visible = color, text, 15, true, true, Color3.fromRGB(0, 0, 0), false
-    return nameTag
-end
-
-local function smoothInterpolation(from, to, factor)
-    return from + (to - from) * factor
-end
-
-local function updateESPBoxes()
-    if BOXEnabled then
-        for player, box in pairs(espBoxes) do
-            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                if teamCheckEnabled and player.Team == Players.LocalPlayer.Team then
-                    box.Visible = false
-                else
-                    local rootPart = player.Character.HumanoidRootPart
-                    local screenPosition, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
-                    if onScreen then
-                        local distance = screenPosition.Z
-                        local scaleFactor = 70 / distance
-                        local boxWidth = 30 * scaleFactor
-                        local boxHeight = 50 * scaleFactor
-                        box.Size = Vector2.new(boxWidth, boxHeight)
-                        box.Position = Vector2.new(screenPosition.X - boxWidth / 2, screenPosition.Y - boxHeight / 2)
-                        box.Visible = true
-                    else
-                        box.Visible = false
-                    end
-                end
-            else
-                box.Visible = false
-            end
-        end
-    end
-end
-
-local function updateTracers()
-    if TRAEnabled then
-        for player, tracer in pairs(espTracers) do
-            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                if teamCheckEnabled and player.Team == Players.LocalPlayer.Team then
-                    tracer.Visible = false
-                else
-                    local rootPart = player.Character.HumanoidRootPart
-                    local screenPosition, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
-                    if onScreen then
-                        local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-                        local targetPosition = Vector2.new(screenPosition.X, screenPosition.Y)
-                        tracer.From = smoothInterpolation(tracer.From, screenCenter, 0.1)
-                        tracer.To = smoothInterpolation(tracer.To, targetPosition, 0.1)
-                        tracer.Visible = true
-                    else
-                        tracer.Visible = false
-                    end
-                end
-            else
-                tracer.Visible = false
-            end
-        end
-    end
-end
-
-local function updateNameTags()
-    if NameTagsEnabled then
-        for player, nameTag in pairs(espNameTags) do
-            if player.Character and player.Character:FindFirstChild("Head") then
-                if teamCheckEnabled and player.Team == Players.LocalPlayer.Team then
-                    nameTag.Visible = false
-                else
-                    local headPosition, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
-                    if onScreen then
-                        nameTag.Position = Vector2.new(headPosition.X, headPosition.Y - 30)
-                        nameTag.Visible = true
-                    else
-                        nameTag.Visible = false
-                    end
-                end
-            else
-                nameTag.Visible = false
-            end
-        end
-    end
-end
-
-local function addESP(player)
-    if player ~= Players.LocalPlayer then
-        local box = createESPBox(boxColor)
-        espBoxes[player] = box
-        player.CharacterAdded:Connect(function()
-            espBoxes[player] = box
-        end)
-    end
-end
-
-local function addTracer(player)
-    if player ~= Players.LocalPlayer then
-        local tracer = createTracer(tracerColor)
-        espTracers[player] = tracer
-        player.CharacterAdded:Connect(function()
-            espTracers[player] = tracer
-        end)
-    end
-end
-
-local function addNameTag(player)
-    if player ~= Players.LocalPlayer then
-        local nameTag = createNameTag(nameTagColor, player.Name)
-        espNameTags[player] = nameTag
-        player.CharacterAdded:Connect(function()
-            espNameTags[player] = nameTag
-        end)
-    end
-end
-
-local function removeESP(player)
-    if espBoxes[player] then
-        espBoxes[player].Visible = false
-        espBoxes[player] = nil
-    end
-end
-
-local function removeTracer(player)
-    if espTracers[player] then
-        espTracers[player].Visible = false
-        espTracers[player] = nil
-    end
-end
-
-local function removeNameTag(player)
-    if espNameTags[player] then
-        espNameTags[player].Visible = false
-        espNameTags[player] = nil
-    end
-end
-
-local function updateTeamColor(player)
-    local teamColor = player.Team and player.Team.TeamColor.Color
-    if EspTeamColor then
-        if espBoxes[player] then espBoxes[player].Color = teamColor end
-        if espTracers[player] then espTracers[player].Color = teamColor end
-        if espNameTags[player] then espNameTags[player].Color = teamColor end
-    else
-        if espBoxes[player] then espBoxes[player].Color = boxColor end
-        if espTracers[player] then espTracers[player].Color = tracerColor end
-        if espNameTags[player] then espNameTags[player].Color = nameTagColor end
-    end
-end
-
-Players.PlayerAdded:Connect(function(player)
-    addESP(player) addTracer(player) addNameTag(player)
-    player:GetPropertyChangedSignal("Team"):Connect(function() updateTeamColor(player) end)
-    updateTeamColor(player)
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    removeESP(player)
-    removeTracer(player)
-    removeNameTag(player)
-end)
-
-for _, player in pairs(Players:GetPlayers()) do
-    addESP(player)
-    addTracer(player)
-    addNameTag(player)
-end
-
-RunService.RenderStepped:Connect(updateESPBoxes)
-RunService.RenderStepped:Connect(updateTracers)
-RunService.RenderStepped:Connect(updateNameTags)
-
-local espbox = VisualsTab:AddLeftGroupbox("esp")
-
-espbox:AddToggle("TeamCheck", {
-    Text = "Enable Team Check",
-    Default = false,
-    Callback = function(state)
-        teamCheckEnabled = state
-        for player, box in pairs(espBoxes) do
-            if player.Team == Players.LocalPlayer.Team then
-                box.Visible = false
-            end
-        end
-        for player, tracer in pairs(espTracers) do
-            if player.Team == Players.LocalPlayer.Team then
-                tracer.Visible = false
-            end
-        end
-        for player, nameTag in pairs(espNameTags) do
-            if player.Team == Players.LocalPlayer.Team then
-                nameTag.Visible = false
-            end
-        end
-    end,
-})
-
-espbox:AddToggle("EspTeamColor", {
-    Text = "ESP Team Color",
-    Default = false,
-    Callback = function(state)
-        EspTeamColor = state
-        for player, box in pairs(espBoxes) do
-            updateTeamColor(player)
-        end
-        for player, tracer in pairs(espTracers) do
-            updateTeamColor(player)
-        end
-        for player, nameTag in pairs(espNameTags) do
-            updateTeamColor(player)
-        end
-    end,
-})
-
-espbox:AddToggle("EnableESP", {
-    Text = "Box ESP",
-    Default = false,
-    Callback = function(state)
-        BOXEnabled = state
-        for player, box in pairs(espBoxes) do
-            box.Visible = state and (teamCheckEnabled and player.Team ~= Players.LocalPlayer.Team or not teamCheckEnabled)
-        end
-    end,
-}):AddColorPicker("BoxColor", {
-    Text = "Box Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Callback = function(color)
-        boxColor = color
-        for _, box in pairs(espBoxes) do
-            box.Color = color
-        end
-    end,
-})
-
-espbox:AddToggle("EnableNameTags", {
-    Text = "Enable NameTags",
-    Default = false,
-    Callback = function(state)
-        NameTagsEnabled = state
-        for player, nameTag in pairs(espNameTags) do
-            nameTag.Visible = state and (teamCheckEnabled and player.Team ~= Players.LocalPlayer.Team or not teamCheckEnabled)
-        end
-    end,
-}):AddColorPicker("NameTagColor", {
-    Text = "NameTag Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Callback = function(color)
-        nameTagColor = color
-        for _, nameTag in pairs(espNameTags) do
-            nameTag.Color = color
-        end
-    end,
-})
-
-espbox:AddToggle("EnableTracer", {
-    Text = "Enable Tracers",
-    Default = false,
-    Callback = function(state)
-        TRAEnabled = state
-        for player, tracer in pairs(espTracers) do
-            tracer.Visible = state and (teamCheckEnabled and player.Team ~= Players.LocalPlayer.Team or not teamCheckEnabled)
-        end
-    end,
-}):AddColorPicker("TracerColor", {
-    Text = "Tracer Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Callback = function(color)
-        tracerColor = color
-        for _, tracer in pairs(espTracers) do
-            tracer.Color = color
-        end
-    end,
-})
 
 local worldbox = VisualsTab:AddRightGroupbox("World")
 
@@ -1418,6 +1228,362 @@ local SkyboxDropdown = worldbox:AddDropdown("SkyboxSelector", {
         Visuals:SwitchSkybox(SelectedSkybox)
     end
 end)
+
+local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
+
+if not _G.ExunysESPLoaded then
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/Exunys/Exunys-ESP/main/src/ESP.lua"))()
+    _G.ExunysESPLoaded = true
+end
+
+local ESP = getgenv().ExunysDeveloperESP
+ESP.Settings.Enabled = false
+
+local queuedToggles = {
+    NameTag = false,
+    Box = false,
+    Tracer = false,
+    HeadDot = false,
+    HealthBar = false,
+    Chams = false,
+    Crosshair = false
+}
+
+local function applyQueuedToggles()
+    ESP.Properties.ESP.DisplayName = queuedToggles.NameTag
+    ESP.Properties.Box.Enabled = queuedToggles.Box
+    ESP.Properties.Tracer.Enabled = queuedToggles.Tracer
+    ESP.Properties.HeadDot.Enabled = queuedToggles.HeadDot
+    ESP.Properties.HealthBar.Enabled = queuedToggles.HealthBar
+    ESP.Properties.Chams.Enabled = queuedToggles.Chams
+    ESP.Properties.Crosshair.Enabled = queuedToggles.Crosshair
+end
+
+local function setToggle(name, value)
+    queuedToggles[name] = value
+    if ESP.Settings.Enabled then
+        applyQueuedToggles()
+    end
+end
+
+local function setProperty(path, value)
+    local ref = ESP
+    for i = 1, #path-1 do
+        ref = ref[path[i]]
+    end
+    ref[path[#path]] = value
+end
+
+VisualsEx:AddToggle("espEnabled", {
+    Text = "Enable ESP",
+    Default = false,
+    Callback = function(value)
+        if value and not ESP.Loaded then
+            ESP:Load()
+        end
+        ESP.Settings.Enabled = value
+        applyQueuedToggles()
+    end
+})
+
+local TeamCheck = false
+
+local function IsEnemy(player)
+    if not TeamCheck then
+        return true
+    end
+    return player.Team ~= LocalPlayer.Team
+end
+
+VisualsEx:AddToggle("teamCheck", {
+    Text = "Team Check",
+    Default = ESP.Settings.TeamCheck,
+    Callback = function(value)
+        ESP.Settings.TeamCheck = value
+        UpdateAllChams()
+    end
+})
+
+local espElements = {
+    {Name = "NameTag", Path = {"Properties", "ESP", "DisplayName"}, Type = "Toggle"},
+    {Name = "Box", Path = {"Properties", "Box", "Enabled"}, Type = "Toggle"},
+    {Name = "Box Color", Path = {"Properties", "Box", "Color"}, Type = "Color"},
+    {Name = "Tracer", Path = {"Properties", "Tracer", "Enabled"}, Type = "Toggle"},
+    {Name = "Tracer Color", Path = {"Properties", "Tracer", "Color"}, Type = "Color"},
+    {Name = "HeadDot", Path = {"Properties", "HeadDot", "Enabled"}, Type = "Toggle"},
+    {Name = "HeadDot Size", Path = {"Properties", "HeadDot", "NumSides"}, Type = "Slider", Min = 3, Max = 60, Default = ESP.Properties.HeadDot.NumSides},
+    {Name = "HealthBar", Path = {"Properties", "HealthBar", "Enabled"}, Type = "Toggle"},
+}
+
+for _, element in ipairs(espElements) do
+    if element.Type == "Toggle" then
+        VisualsEx:AddToggle(element.Name, {
+            Text = element.Name,
+            Default = false,
+            Callback = function(val)
+                setToggle(element.Name, val)
+            end
+        })
+    elseif element.Type == "Color" then
+        VisualsEx:AddLabel(element.Name):AddColorPicker(element.Name.."Color", {
+            Default = setProperty and ESP[element.Path[1]][element.Path[2]][element.Path[3]] or Color3.new(1,1,1),
+            Callback = function(val)
+                setProperty(element.Path, val)
+            end
+        })
+    elseif element.Type == "Slider" then
+        VisualsEx:AddSlider(element.Name, {
+            Text = element.Name,
+            Min = element.Min,
+            Max = element.Max,
+            Default = element.Default,
+            Rounding = 1,
+            Callback = function(val)
+                setProperty(element.Path, val)
+            end
+        })
+    end
+end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local SelfChamsEnabled = false
+local RainbowChamsEnabled = false
+local SelfChamsColor = Color3.fromRGB(255, 255, 255)
+local originalProperties = {}
+
+local function HSVToRGB(h, s, v)
+    local c = v * s
+    local x = c * (1 - math.abs((h / 60) % 2 - 1))
+    local m = v - c
+    local r, g, b = 0, 0, 0
+
+    if h < 60 then r, g, b = c, x, 0
+    elseif h < 120 then r, g, b = x, c, 0
+    elseif h < 180 then r, g, b = 0, c, x
+    elseif h < 240 then r, g, b = 0, x, c
+    elseif h < 300 then r, g, b = x, 0, c
+    else r, g, b = c, 0, x end
+
+    return Color3.new(r + m, g + m, b + m)
+end
+
+local function applyChams(char)
+    if not char then return end
+    originalProperties = {}
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            originalProperties[part] = {
+                Color = part.Color,
+                Material = part.Material
+            }
+            part.Material = Enum.Material.ForceField
+            part.Color = SelfChamsColor
+        end
+    end
+end
+
+local function restoreChams()
+    for part, props in pairs(originalProperties) do
+        if part and part.Parent then
+            part.Color = props.Color
+            part.Material = props.Material
+        end
+    end
+    originalProperties = {}
+end
+
+local function updateChams()
+    if not SelfChamsEnabled then return end
+    for part, _ in pairs(originalProperties) do
+        if part and part.Parent then
+            if RainbowChamsEnabled then
+                local hue = (tick() * 120) % 360
+                part.Color = HSVToRGB(hue, 1, 1)
+            else
+                part.Color = SelfChamsColor
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(updateChams)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    if SelfChamsEnabled then
+        task.wait(1)
+        applyChams(char)
+    end
+end)
+
+VisualsEx:AddToggle("selfChamsEnabled", {
+    Text = "Self Chams",
+    Default = false,
+    Callback = function(val)
+        SelfChamsEnabled = val
+        if val then
+            if LocalPlayer.Character then
+                applyChams(LocalPlayer.Character)
+            end
+        else
+            restoreChams()
+        end
+    end
+})
+
+VisualsEx:AddToggle("rainbowChams", {
+    Text = "Rainbow Chams",
+    Default = false,
+    Callback = function(val)
+        RainbowChamsEnabled = val
+    end
+})
+
+VisualsEx:AddLabel("Self Chams Color"):AddColorPicker("selfChamsColor", {
+    Default = SelfChamsColor,
+    Callback = function(val)
+        SelfChamsColor = val
+    end
+})
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+local ChamsEnabled = false
+local ChamsOccludedColor = {Color3.fromRGB(128, 0, 128), 0.7}
+local ChamsVisibleColor = {Color3.fromRGB(255, 0, 255), 0.3}
+
+local AdornmentsCache = {}
+local IgnoreNames = {["HumanoidRootPart"] = true}
+
+local function CreateAdornment(part, isHead, vis)
+    local adorn
+    if isHead then
+        adorn = Instance.new("CylinderHandleAdornment")
+        adorn.Height = vis == 1 and 0.87 or 1.02
+        adorn.Radius = vis == 1 and 0.5 or 0.65
+    else
+        adorn = Instance.new("BoxHandleAdornment")
+        local offset = vis == 1 and -0.05 or 0.05
+        adorn.Size = part.Size + Vector3.new(offset, offset, offset)
+    end
+    adorn.Adornee = part
+    adorn.Parent = part
+    adorn.ZIndex = vis == 1 and 2 or 1
+    adorn.AlwaysOnTop = vis == 1
+    adorn.Visible = false
+    return adorn
+end
+
+local function IsEnemy(player)
+    if ESP and ESP.Settings and ESP.Settings.TeamCheck then
+        return player.Team ~= LocalPlayer.Team
+    end
+    return true
+end
+
+local function ApplyChams(player)
+    if player ~= LocalPlayer and player.Character then
+        for _, part in pairs(player.Character:GetChildren()) do
+            if part:IsA("BasePart") and not IgnoreNames[part.Name] then
+                if not AdornmentsCache[part] then
+                    AdornmentsCache[part] = {
+                        CreateAdornment(part, part.Name=="Head", 1),
+                        CreateAdornment(part, part.Name=="Head", 2)
+                    }
+                end
+                local ad = AdornmentsCache[part]
+                local visible = ChamsEnabled and IsEnemy(player)
+
+                ad[1].Visible = visible
+                ad[1].Color3 = ChamsOccludedColor[1]
+                ad[1].Transparency = ChamsOccludedColor[2]
+
+                ad[2].Visible = visible
+                ad[2].AlwaysOnTop = true
+                ad[2].ZIndex = 9e9
+                ad[2].Color3 = ChamsVisibleColor[1]
+                ad[2].Transparency = ChamsVisibleColor[2]
+            end
+        end
+    end
+end
+
+local function UpdateAllChams()
+    for _, player in pairs(Players:GetPlayers()) do
+        ApplyChams(player)
+    end
+end
+
+local function TrackPlayer(player)
+    player:GetPropertyChangedSignal("Team"):Connect(function()
+        if AdornmentsCache[player] then
+            for _, ad in pairs(AdornmentsCache[player]) do
+                ad.Visible = ChamsEnabled and IsEnemy(player)
+            end
+        end
+    end)
+end
+
+Players.PlayerAdded:Connect(TrackPlayer)
+for _, plr in pairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then
+        TrackPlayer(plr)
+    end
+end
+
+RunService.RenderStepped:Connect(UpdateAllChams)
+
+VisualsEx:AddToggle("chamsEnabled", {
+    Text = "Chams",
+    Default = ChamsEnabled,
+    Callback = function(val)
+        ChamsEnabled = val
+        for part, ad in pairs(AdornmentsCache) do
+            ad[1].Visible = val
+            ad[2].Visible = val
+        end
+    end
+})
+
+VisualsEx:AddLabel("Chams Occluded Color"):AddColorPicker("chamsOccludedColor", {
+    Default = ChamsOccludedColor[1],
+    Callback = function(val)
+        ChamsOccludedColor[1] = val
+    end
+})
+
+VisualsEx:AddLabel("Chams Visible Color"):AddColorPicker("chamsVisibleColor", {
+    Default = ChamsVisibleColor[1],
+    Callback = function(val)
+        ChamsVisibleColor[1] = val
+    end
+})
+
+VisualsEx:AddSlider("chamsOccludedTransparency", {
+    Text = "Occluded Transparency",
+    Default = ChamsOccludedColor[2],
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(val)
+        ChamsOccludedColor[2] = val
+    end
+})
+
+VisualsEx:AddSlider("chamsVisibleTransparency", {
+    Text = "Visible Transparency",
+    Default = ChamsVisibleColor[2],
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(val)
+        ChamsVisibleColor[2] = val
+    end
+})
 
 local localPlayer = game:GetService("Players").LocalPlayer
 local Cmultiplier = 1  
