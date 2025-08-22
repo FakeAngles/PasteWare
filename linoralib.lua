@@ -1,7 +1,7 @@
 local InputService = game:GetService('UserInputService');
 local TextService = game:GetService('TextService');
-local CoreGui = cloneref(game:GetService('CoreGui'));
-local Teams = cloneref(game:GetService('Teams'));
+local CoreGui = game:GetService('CoreGui');
+local Teams = game:GetService('Teams');
 local Players = game:GetService('Players');
 local RunService = game:GetService('RunService')
 local TweenService = game:GetService('TweenService');
@@ -32,12 +32,12 @@ local Library = {
     FontColor = Color3.fromRGB(255, 255, 255);
     MainColor = Color3.fromRGB(28, 28, 28);
     BackgroundColor = Color3.fromRGB(20, 20, 20);
-    AccentColor = Color3.fromRGB(0, 85, 255);
+    AccentColor = Color3.fromRGB(139, 139, 139);
     OutlineColor = Color3.fromRGB(50, 50, 50);
     RiskColor = Color3.fromRGB(255, 50, 50),
 
     Black = Color3.new(0, 0, 0);
-    Font = Enum.Font.Code,
+    Font = getgenv().LibraryFont or Enum.Font.Nunito,
 
     OpenedFrames = {};
     DependencyBoxes = {};
@@ -1090,7 +1090,7 @@ do
         local ContainerLabel = Library:CreateLabel({
             TextXAlignment = Enum.TextXAlignment.Left;
             Size = UDim2.new(1, 0, 0, 18);
-            TextSize = 13;
+            TextSize = 18;
             Visible = false;
             ZIndex = 110;
             Parent = Library.KeybindContainer;
@@ -1145,6 +1145,24 @@ do
             ModeButtons[Mode] = ModeButton;
         end;
 
+        KeyPicker.Show = true
+        
+        function updateKeyDisplay()
+            local YSize = 0
+            local XSize = 0
+
+            for _, Label in next, Library.KeybindContainer:GetChildren() do
+                if Label:IsA('TextLabel') and Label.Visible then
+                    YSize = YSize + 18;
+                    if (Label.TextBounds.X > XSize) then
+                        XSize = Label.TextBounds.X
+                    end
+                end;
+            end;
+
+            Library.KeybindFrame.Size = UDim2.new(0, math.max(XSize + 15, 210), 0, YSize + 23)
+        end
+
         function KeyPicker:Update()
             if Info.NoUI then
                 return;
@@ -1152,12 +1170,35 @@ do
 
             local State = KeyPicker:GetState();
 
-            ContainerLabel.Text = string.format('[%s] %s (%s)', KeyPicker.Value, Info.Text, KeyPicker.Mode);
+            if KeyPicker.Mode == "Always" then
+                ContainerLabel.Text = string.format('[%s] %s', KeyPicker.Value, Info.Text);
+            else
+                ContainerLabel.Text = string.format('[%s] %s (%s)', KeyPicker.Value, Info.Text, KeyPicker.Mode);
+            end
 
             ContainerLabel.Visible = true;
             ContainerLabel.TextColor3 = State and Library.AccentColor or Library.FontColor;
 
+            if not State and Toggles.OnlyShowEnabledKeybinds and Toggles.OnlyShowEnabledKeybinds.Value then
+                --print("here", State, KeyPicker)
+                ContainerLabel.Visible = false;
+                updateKeyDisplay()
+                return
+            end;
+
+            if KeyPicker.Show ~= nil then
+                ContainerLabel.Visible = KeyPicker.Show
+            end
+
+            Library.RegistryMap[ContainerLabel].KEYBINDLABEL = true;
             Library.RegistryMap[ContainerLabel].Properties.TextColor3 = State and 'AccentColor' or 'FontColor';
+
+            updateKeyDisplay()
+        end;
+
+        function KeyPicker:SetDisplay(Value)
+            --print(Value)
+            ContainerLabel.Visible = Value
 
             local YSize = 0
             local XSize = 0
@@ -1172,7 +1213,7 @@ do
             end;
 
             Library.KeybindFrame.Size = UDim2.new(0, math.max(XSize + 10, 210), 0, YSize + 23)
-        end;
+        end
 
         function KeyPicker:GetState()
             if KeyPicker.Mode == 'Always' then
@@ -1220,7 +1261,8 @@ do
             if ParentObj.Type == 'Toggle' and KeyPicker.SyncToggleState then
                 ParentObj:SetValue(not ParentObj.Value)
             end
-
+            
+            --Library:Notify(("%s has been toggled %s"):format(KeyPicker.Text, KeyPicker.Value and "ON" or "OFF"))
             Library:SafeCallback(KeyPicker.Callback, KeyPicker.Toggled)
             Library:SafeCallback(KeyPicker.Clicked, KeyPicker.Toggled)
         end
@@ -1277,11 +1319,11 @@ do
                     Event:Disconnect();
                 end);
             elseif Input.UserInputType == Enum.UserInputType.MouseButton2 and not Library:MouseIsOverOpenedFrame() then
-                ModeSelectOuter.Visible = true;
+                --ModeSelectOuter.Visible = true;
             end;
         end);
 
-        Library:GiveSignal(InputService.InputBegan:Connect(function(Input)
+        Library:GiveSignal(InputService.InputBegan:Connect(function(Input, t)
             if (not Picking) then
                 if KeyPicker.Mode == 'Toggle' then
                     local Key = KeyPicker.Value;
@@ -1293,7 +1335,7 @@ do
                             KeyPicker:DoClick()
                         end;
                     elseif Input.UserInputType == Enum.UserInputType.Keyboard then
-                        if Input.KeyCode.Name == Key then
+                        if Input.KeyCode.Name == Key and not t then
                             KeyPicker.Toggled = not KeyPicker.Toggled;
                             KeyPicker:DoClick()
                         end;
@@ -2682,8 +2724,8 @@ end;
 do
     Library.NotificationArea = Library:Create('Frame', {
         BackgroundTransparency = 1;
-        Position = UDim2.new(0, 0, 0, 40);
-        Size = UDim2.new(0, 300, 0, 200);
+        Position = UDim2.new(0, 0, 0.7, 0);
+        Size = UDim2.new(0, 600, 0, 400);
         ZIndex = 100;
         Parent = ScreenGui;
     });
@@ -2697,7 +2739,8 @@ do
 
     local WatermarkOuter = Library:Create('Frame', {
         BorderColor3 = Color3.new(0, 0, 0);
-        Position = UDim2.new(0, 100, 0, -25);
+        AnchorPoint = Vector2.new(0, 0);
+        Position = UDim2.new(0, 0, 0, 0);
         Size = UDim2.new(0, 213, 0, 20);
         ZIndex = 200;
         Visible = false;
@@ -2747,7 +2790,7 @@ do
     local WatermarkLabel = Library:CreateLabel({
         Position = UDim2.new(0, 5, 0, 0);
         Size = UDim2.new(1, -4, 1, 0);
-        TextSize = 14;
+        TextSize = 18;
         TextXAlignment = Enum.TextXAlignment.Left;
         ZIndex = 203;
         Parent = InnerFrame;
@@ -2755,7 +2798,7 @@ do
 
     Library.Watermark = WatermarkOuter;
     Library.WatermarkText = WatermarkLabel;
-    Library:MakeDraggable(Library.Watermark);
+    --Library:MakeDraggable(Library.Watermark);
 
 
 
@@ -2764,7 +2807,7 @@ do
         BorderColor3 = Color3.new(0, 0, 0);
         Position = UDim2.new(0, 10, 0.5, 0);
         Size = UDim2.new(0, 210, 0, 20);
-        Visible = false;
+        Visible = true;
         ZIndex = 100;
         Parent = ScreenGui;
     });
@@ -2834,7 +2877,7 @@ function Library:SetWatermarkVisibility(Bool)
 end;
 
 function Library:SetWatermark(Text)
-    local X, Y = Library:GetTextBounds(Text, Library.Font, 14);
+    local X, Y = Library:GetTextBounds(Text, Library.Font, 18);
     Library.Watermark.Size = UDim2.new(0, X + 15, 0, (Y * 1.5) + 3);
     Library:SetWatermarkVisibility(true)
 
@@ -2842,7 +2885,7 @@ function Library:SetWatermark(Text)
 end;
 
 function Library:Notify(Text, Time)
-    local XSize, YSize = Library:GetTextBounds(Text, Library.Font, 14);
+    local XSize, YSize = Library:GetTextBounds(Text, Library.Font, 18);
 
     YSize = YSize + 7
 
@@ -2901,7 +2944,7 @@ function Library:Notify(Text, Time)
         Size = UDim2.new(1, -4, 1, 0);
         Text = Text;
         TextXAlignment = Enum.TextXAlignment.Left;
-        TextSize = 14;
+        TextSize = 18;
         ZIndex = 103;
         Parent = InnerFrame;
     });
@@ -2919,7 +2962,7 @@ function Library:Notify(Text, Time)
         BackgroundColor3 = 'AccentColor';
     }, true);
 
-    pcall(NotifyOuter.TweenSize, NotifyOuter, UDim2.new(0, XSize + 8 + 4, 0, YSize), 'Out', 'Quad', 0.4, true);
+    pcall(NotifyOuter.TweenSize, NotifyOuter, UDim2.new(0, XSize + 12, 0, YSize), "Out", "Quad", 0.4, true);
 
     task.spawn(function()
         wait(Time or 5);
@@ -3515,12 +3558,12 @@ function Library:CreateWindow(...)
         local FadeTime = Config.MenuFadeTime;
         Fading = true;
         Toggled = (not Toggled);
-        ModalElement.Modal = Toggled;
+        ModalElement.Modal = (((Toggles.UnlockMouse and Toggles.UnlockMouse.Value) or false) and Toggled) or false;
 
         if Toggled then
             -- A bit scuffed, but if we're going from not toggled -> toggled we want to show the frame immediately so that the fade is visible.
             Outer.Visible = true;
-
+--[[
             task.spawn(function()
                 -- TODO: add cursor fade?
                 local State = InputService.MouseIconEnabled;
@@ -3559,6 +3602,7 @@ function Library:CreateWindow(...)
                 Cursor:Remove();
                 CursorOutline:Remove();
             end);
+            ]]
         end;
 
         for _, Desc in next, Outer:GetDescendants() do
@@ -3591,11 +3635,12 @@ function Library:CreateWindow(...)
                     continue;
                 end;
 
-                TweenService:Create(Desc, TweenInfo.new(FadeTime, Enum.EasingStyle.Linear), { [Prop] = Toggled and Cache[Prop] or 1 }):Play();
+                --TweenService:Create(Desc, TweenInfo.new(FadeTime, Enum.EasingStyle.Linear), { [Prop] = Toggled and Cache[Prop] or 1 }):Play();
+                Desc[Prop] = Toggled and Cache[Prop] or 1
             end;
         end;
 
-        task.wait(FadeTime);
+        --task.wait(FadeTime);
 
         Outer.Visible = Toggled;
 
@@ -3603,17 +3648,14 @@ function Library:CreateWindow(...)
     end
 
     Library:GiveSignal(InputService.InputBegan:Connect(function(Input, Processed)
-        if type(Library.ToggleKeybind) == "table" and Library.ToggleKeybind.Type == "KeyPicker" then
+        if type(Library.ToggleKeybind) == 'table' and Library.ToggleKeybind.Type == 'KeyPicker' then
             if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode.Name == Library.ToggleKeybind.Value then
                 task.spawn(Library.Toggle)
-                return
             end
-        end
-        if Input.KeyCode == Enum.KeyCode.RightControl or (Input.KeyCode == Enum.KeyCode.RightShift and (not Processed)) then
+        elseif Input.KeyCode == Enum.KeyCode.RightControl or (Input.KeyCode == Enum.KeyCode.RightShift and (not Processed)) then
             task.spawn(Library.Toggle)
         end
     end))
-    
 
     if Config.AutoShow then task.spawn(Library.Toggle) end
 
@@ -3636,5 +3678,4 @@ Players.PlayerAdded:Connect(OnPlayerChange);
 Players.PlayerRemoving:Connect(OnPlayerChange);
 
 getgenv().Library = Library
-
 return Library
