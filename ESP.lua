@@ -1651,15 +1651,23 @@ local LoadESP = function()
 	end)
 end
 
-setmetatable(Environment, {
-	__call = function()
-		if Loaded then
-			return
-		end
+local Environment = getgenv().ExunysDeveloperESP or {}
+local Loaded = false
+local CrosshairParts = CrosshairParts or {}
 
-		Loaded = true
-		return LoadESP(), CreatingFunctions.Crosshair()
-	end
+setmetatable(Environment, {
+    __call = function()
+        if Loaded then return end
+        Loaded = true
+
+        if LoadESP and type(LoadESP) == "function" then
+            pcall(LoadESP)
+        end
+
+        if CreatingFunctions and type(CreatingFunctions.Crosshair) == "function" then
+            pcall(CreatingFunctions.Crosshair)
+        end
+    end
 })
 
 pcall(spawn, function()
@@ -1672,157 +1680,173 @@ end)
 
 --// Interactive User Functions
 
-Environment.UnwrapPlayers = function() -- (<void>) => <boolean> Success Status
-	local UtilityAssets = Environment.UtilityAssets
+Environment.UnwrapPlayers = function()
+    local UtilityAssets = Environment.UtilityAssets or {}
+    local WrappedObjects = UtilityAssets.WrappedObjects or {}
+    local ServiceConnections = UtilityAssets.ServiceConnections or {}
 
-	local WrappedObjects = UtilityAssets.WrappedObjects
-	local ServiceConnections = UtilityAssets.ServiceConnections
+    for _, Entry in next, WrappedObjects do
+        if UtilityFunctions and UtilityFunctions.UnwrapObject then
+            pcall(UtilityFunctions.UnwrapObject, Entry.Hash)
+        end
+    end
 
-	for _, Entry in next, WrappedObjects do
-		pcall(UtilityFunctions.UnwrapObject, Entry.Hash)
-	end
+    for _, ConnectionIndex in next, {"PlayerRemoving", "PlayerAdded", "CharacterAdded"} do
+        if ServiceConnections[ConnectionIndex] and Disconnect then
+            pcall(Disconnect, ServiceConnections[ConnectionIndex])
+        end
+    end
 
-	for _, ConnectionIndex in next, {"PlayerRemoving", "PlayerAdded", "CharacterAdded"} do
-		pcall(Disconnect, ServiceConnections[ConnectionIndex])
-	end
-
-	return #WrappedObjects == 0
+    return #WrappedObjects == 0
 end
 
-Environment.UnwrapAll = function(self) -- METHOD | (<void>) => <void>
-	assert(self, "EXUNYS_ESP.UnwrapAll: Missing parameter #1 \"self\" <table>.")
-
-	if self.UnwrapPlayers() and CrosshairParts.LeftLine then
-		self.RemoveCrosshair()
-	end
-
-	return #self.UtilityAssets.WrappedObjects == 0 and not CrosshairParts.LeftLine
+Environment.UnwrapAll = function(self)
+    if not self then return false end
+    if self.UnwrapPlayers and self.UnwrapPlayers() and CrosshairParts.LeftLine then
+        if self.RemoveCrosshair then
+            pcall(self.RemoveCrosshair)
+        end
+    end
+    local wrappedCount = self.UtilityAssets and #self.UtilityAssets.WrappedObjects or 0
+    return wrappedCount == 0 and not CrosshairParts.LeftLine
 end
 
-Environment.Restart = function(self) -- METHOD | (<void>) => <void>
-	assert(self, "EXUNYS_ESP.Restart: Missing parameter #1 \"self\" <table>.")
+Environment.Restart = function(self)
+    if not self then return end
+    local Objects = {}
+    local WrappedObjects = (self.UtilityAssets and self.UtilityAssets.WrappedObjects) or {}
 
-	local Objects = {}
+    for _, Value in next, WrappedObjects do
+        Objects[#Objects + 1] = {Value.Hash, Value.Object, Value.Name, Value.Allowed, Value.RenderDistance}
+    end
 
-	for _, Value in next, self.UtilityAssets.WrappedObjects do
-		Objects[#Objects + 1] = {Value.Hash, Value.Object, Value.Name, Value.Allowed, Value.RenderDistance}
-	end
+    for _, Value in next, Objects do
+        if self.UnwrapObject then pcall(self.UnwrapObject, Value[1]) end
+    end
 
-	for _, Value in next, Objects do
-		self.UnwrapObject(Value[1])
-	end
+    for _, Value in next, Objects do
+        if self.WrapObject then pcall(self.WrapObject, select(2, unpack(Value))) end
+    end
 
-	for _, Value in next, Objects do
-		self.WrapObject(select(2, unpack(Value)))
-	end
-
-	if CrosshairParts.LeftLine then
-		self.RemoveCrosshair()
-		self.RenderCrosshair()
-	end
+    if CrosshairParts.LeftLine then
+        if self.RemoveCrosshair then pcall(self.RemoveCrosshair) end
+        if self.RenderCrosshair then pcall(self.RenderCrosshair) end
+    end
 end
 
-Environment.Exit = function(self) -- METHOD | (<void>) => <void>
-	assert(self, "EXUNYS_ESP.Exit: Missing parameter #1 \"self\" <table>.")
+Environment.Exit = function(self)
+    if not self then return end
+    if self:UnwrapAll() then
+        local ServiceConnections = (self.UtilityAssets and self.UtilityAssets.ServiceConnections) or {}
+        for _, Connection in next, ServiceConnections do
+            if Disconnect then pcall(Disconnect, Connection) end
+        end
 
-	if self:UnwrapAll() then
-		for _, Connection in next, self.UtilityAssets.ServiceConnections do
-			pcall(Disconnect, Connection)
-		end
+        for _, RenderObject in next, CrosshairParts do
+            if RenderObject.Remove then pcall(RenderObject.Remove, RenderObject) end
+        end
 
-		for _, RenderObject in next, CrosshairParts do
-			pcall(RenderObject.Remove, RenderObject)
-		end
+        for _, Table in next, {CoreFunctions, UpdatingFunctions, CreatingFunctions, UtilityFunctions} do
+            if Table then
+                for k in next, Table do Table[k] = nil end
+            end
+        end
 
-		for _, Table in next, {CoreFunctions, UpdatingFunctions, CreatingFunctions, UtilityFunctions} do
-			for FunctionName, _ in next, Table do
-				Table[FunctionName] = nil
-			end
+        for k in next, Environment do
+            if getgenv().ExunysDeveloperESP then
+                getgenv().ExunysDeveloperESP[k] = nil
+            end
+        end
 
-			Table = nil
-		end
-
-		for Index, _ in next, Environment do
-			getgenv().ExunysDeveloperESP[Index] = nil
-		end
-
-		LoadESP = nil; Recursive = nil; Loaded = false
-
-		if cleardrawcache then
-			cleardrawcache()
-		end
-
-		getgenv().ExunysDeveloperESP = nil
-	end
+        LoadESP, Recursive, Loaded = nil, nil, false
+        if cleardrawcache then pcall(cleardrawcache) end
+        getgenv().ExunysDeveloperESP = nil
+    end
 end
 
-Environment.WrapObject = function(...) -- (<Instance> Object[, <string> Pseudo Name, <table> Allowed Visuals, <uint> Render Distance]) => <string> Hash
-	return UtilityFunctions:WrapObject(...)
+Environment.WrapObject = function(...)
+    if UtilityFunctions and UtilityFunctions.WrapObject then
+        return UtilityFunctions:WrapObject(...)
+    end
 end
 
-Environment.UnwrapObject = UtilityFunctions.UnwrapObject -- (<Instance/string> Object/Hash[, <string> Hash]) => <void>
-
-Environment.RenderCrosshair = CreatingFunctions.Crosshair -- (<void>) => <void>
-
-Environment.RemoveCrosshair = function() -- (<void>) => <void>
-	if not CrosshairParts.LeftLine then
-		return
-	end
-
-	local ServiceConnections = Environment.UtilityAssets.ServiceConnections
-
-	Disconnect(ServiceConnections.UpdateCrosshairProperties)
-	Disconnect(ServiceConnections.UpdateCrosshair)
-
-	for _, RenderObject in next, CrosshairParts do
-		pcall(RenderObject.Remove, RenderObject)
-	end
-
-	CrosshairParts = {}
+Environment.UnwrapObject = function(...)
+    if UtilityFunctions and UtilityFunctions.UnwrapObject then
+        return UtilityFunctions.UnwrapObject(...)
+    end
 end
 
-Environment.WrapPlayers = LoadESP -- (<void>) => <void>
-
-Environment.GetEntry = UtilityFunctions.GetObjectEntry -- (<Instance> Object[, <string> Hash]) => <table> Entry
-
-Environment.Load = function() -- (<void>) => <void>
-	if Loaded then
-		return
-	end
-
-	LoadESP(); CreatingFunctions.Crosshair(); Loaded = true
+Environment.RenderCrosshair = function()
+    if CreatingFunctions and CreatingFunctions.Crosshair then
+        pcall(CreatingFunctions.Crosshair)
+    end
 end
 
-Environment.UpdateConfiguration = function(DeveloperSettings, Settings, Properties) -- (<table> DeveloperSettings, <table> Settings, <table> Properties) => <table> New Environment
-	assert(DeveloperSettings, "EXUNYS_ESP.UpdateConfiguration: Missing parameter #1 \"DeveloperSettings\" <table>.")
-	assert(Settings, "EXUNYS_ESP.UpdateConfiguration: Missing parameter #2 \"Settings\" <table>.")
-	assert(Properties, "EXUNYS_ESP.UpdateConfiguration: Missing parameter #3 \"Properties\" <table>.")
+Environment.RemoveCrosshair = function()
+    if not CrosshairParts.LeftLine then return end
+    local ServiceConnections = (Environment.UtilityAssets and Environment.UtilityAssets.ServiceConnections) or {}
+    if Disconnect then
+        pcall(Disconnect, ServiceConnections.UpdateCrosshairProperties)
+        pcall(Disconnect, ServiceConnections.UpdateCrosshair)
+    end
 
-	getgenv().ExunysDeveloperESP.DeveloperSettings = DeveloperSettings
-	getgenv().ExunysDeveloperESP.Settings = Settings
-	getgenv().ExunysDeveloperESP.Properties = Properties
+    for _, RenderObject in next, CrosshairParts do
+        if RenderObject.Remove then pcall(RenderObject.Remove, RenderObject) end
+    end
 
-	Environment = getgenv().ExunysDeveloperESP
-
-	return Environment
+    CrosshairParts = {}
 end
 
-Environment.LoadConfiguration = function(self) -- METHOD | (<void>) => <void>
-	assert(self, "EXUNYS_ESP.LoadConfiguration: Missing parameter #1 \"self\" <table>.")
+Environment.WrapPlayers = function()
+    if LoadESP then pcall(LoadESP) end
+end
 
-	local Path = self.DeveloperSettings.Path
+Environment.GetEntry = function(...)
+    if UtilityFunctions and UtilityFunctions.GetObjectEntry then
+        return UtilityFunctions.GetObjectEntry(...)
+    end
+end
 
-	if self:UnwrapAll() then
-		pcall(function()
-			local Configuration, Data = ConfigLibrary:LoadConfig(Path), {}
+Environment.Load = function()
+    if Loaded then return end
+    if LoadESP then pcall(LoadESP) end
+    if CreatingFunctions and CreatingFunctions.Crosshair then
+        pcall(CreatingFunctions.Crosshair)
+    end
+    Loaded = true
+end
 
-			for _, Index in next, {"DeveloperSettings", "Settings", "Properties"} do
-				Data[#Data + 1] = ConfigLibrary:CloneTable(Configuration[Index])
-			end
+Environment.UpdateConfiguration = function(DeveloperSettings, Settings, Properties)
+    if not DeveloperSettings or not Settings or not Properties then return end
+    if not getgenv().ExunysDeveloperESP then return end
 
-			self:UpdateConfiguration(unpack(Data))
-		end)
-	end
+    getgenv().ExunysDeveloperESP.DeveloperSettings = DeveloperSettings
+    getgenv().ExunysDeveloperESP.Settings = Settings
+    getgenv().ExunysDeveloperESP.Properties = Properties
+
+    Environment = getgenv().ExunysDeveloperESP
+    return Environment
+end
+
+Environment.LoadConfiguration = function(self)
+    if not self then return end
+    local Path = (self.DeveloperSettings and self.DeveloperSettings.Path) or nil
+    if not Path then return end
+
+    if self:UnwrapAll() then
+        pcall(function()
+            local Configuration = ConfigLibrary and ConfigLibrary:LoadConfig(Path) or {}
+            local Data = {}
+
+            for _, Index in next, {"DeveloperSettings", "Settings", "Properties"} do
+                if ConfigLibrary and Configuration[Index] then
+                    Data[#Data + 1] = ConfigLibrary:CloneTable(Configuration[Index])
+                end
+            end
+
+            self:UpdateConfiguration(unpack(Data))
+        end)
+    end
 end
 
 Environment.SaveConfiguration = function(self) -- METHOD | (<void>) => <void>
