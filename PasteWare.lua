@@ -1230,12 +1230,15 @@ end)
 local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
 
 if not _G.ExunysESPLoaded then
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/Exunys/Exunys-ESP/main/src/ESP.lua"))()
-    _G.ExunysESPLoaded = true
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare/refs/heads/main/ESP.lua"))()
 end
 
 local ESP = getgenv().ExunysDeveloperESP
+if not ESP then return end 
+
+ESP.Settings = ESP.Settings or {}
 ESP.Settings.Enabled = false
+ESP.Properties = ESP.Properties or {}
 
 local queuedToggles = {
     NameTag = false,
@@ -1243,62 +1246,67 @@ local queuedToggles = {
     Tracer = false,
     HeadDot = false,
     HealthBar = false,
-    Chams = false,
-    Crosshair = false
 }
 
 local function applyQueuedToggles()
-    ESP.Properties.ESP.DisplayName = queuedToggles.NameTag
-    ESP.Properties.Box.Enabled = queuedToggles.Box
-    ESP.Properties.Tracer.Enabled = queuedToggles.Tracer
-    ESP.Properties.HeadDot.Enabled = queuedToggles.HeadDot
-    ESP.Properties.HealthBar.Enabled = queuedToggles.HealthBar
-    ESP.Properties.Chams.Enabled = queuedToggles.Chams
-    ESP.Properties.Crosshair.Enabled = queuedToggles.Crosshair
+    if not ESP.Settings.Enabled or not ESP.Properties then return end
+
+    if ESP.Properties.ESP then ESP.Properties.ESP.DisplayName = queuedToggles.NameTag end
+    if ESP.Properties.Box then ESP.Properties.Box.Enabled = queuedToggles.Box end
+    if ESP.Properties.Tracer then ESP.Properties.Tracer.Enabled = queuedToggles.Tracer end
+    if ESP.Properties.HeadDot then ESP.Properties.HeadDot.Enabled = queuedToggles.HeadDot end
+    if ESP.Properties.HealthBar then ESP.Properties.HealthBar.Enabled = queuedToggles.HealthBar end
 end
 
 local function setToggle(name, value)
     queuedToggles[name] = value
-    if ESP.Settings.Enabled then
-        applyQueuedToggles()
-    end
+    applyQueuedToggles()
 end
 
 local function setProperty(path, value)
     local ref = ESP
     for i = 1, #path-1 do
-        ref = ref[path[i]]
+        if ref and ref[path[i]] then
+            ref = ref[path[i]]
+        else
+            return
+        end
     end
-    ref[path[#path]] = value
+    if ref and path[#path] then
+        ref[path[#path]] = value
+    end
 end
 
 VisualsEx:AddToggle("espEnabled", {
     Text = "Enable ESP",
     Default = false,
     Callback = function(value)
-        if value and not ESP.Loaded then
-            ESP:Load()
+        if value and ESP and not ESP.Loaded and ESP.Load then
+            pcall(function() ESP:Load() end)
         end
-        ESP.Settings.Enabled = value
+        if ESP and ESP.Settings then
+            ESP.Settings.Enabled = value
+        end
         applyQueuedToggles()
     end
 })
 
 local TeamCheck = false
-
 local function IsEnemy(player)
-    if not TeamCheck then
-        return true
-    end
+    if not TeamCheck then return true end
     return player.Team ~= LocalPlayer.Team
 end
 
 VisualsEx:AddToggle("teamCheck", {
     Text = "Team Check",
-    Default = ESP.Settings.TeamCheck,
+    Default = ESP.Settings.TeamCheck or false,
     Callback = function(value)
-        ESP.Settings.TeamCheck = value
-        UpdateAllChams()
+        if ESP and ESP.Settings then
+            ESP.Settings.TeamCheck = value
+        end
+        if UpdateAllChams then
+            pcall(UpdateAllChams)
+        end
     end
 })
 
@@ -1309,7 +1317,7 @@ local espElements = {
     {Name = "Tracer", Path = {"Properties", "Tracer", "Enabled"}, Type = "Toggle"},
     {Name = "Tracer Color", Path = {"Properties", "Tracer", "Color"}, Type = "Color"},
     {Name = "HeadDot", Path = {"Properties", "HeadDot", "Enabled"}, Type = "Toggle"},
-    {Name = "HeadDot Size", Path = {"Properties", "HeadDot", "NumSides"}, Type = "Slider", Min = 3, Max = 60, Default = ESP.Properties.HeadDot.NumSides},
+    {Name = "HeadDot Size", Path = {"Properties", "HeadDot", "NumSides"}, Type = "Slider", Min = 3, Max = 60, Default = ESP.Properties.HeadDot and ESP.Properties.HeadDot.NumSides or 6},
     {Name = "HealthBar", Path = {"Properties", "HealthBar", "Enabled"}, Type = "Toggle"},
 }
 
@@ -1323,8 +1331,16 @@ for _, element in ipairs(espElements) do
             end
         })
     elseif element.Type == "Color" then
+        local ref = ESP
+        for i = 1, #element.Path do
+            if ref then
+                ref = ref[element.Path[i]]
+            else
+                break
+            end
+        end
         VisualsEx:AddLabel(element.Name):AddColorPicker(element.Name.."Color", {
-            Default = setProperty and ESP[element.Path[1]][element.Path[2]][element.Path[3]] or Color3.new(1,1,1),
+            Default = ref or Color3.new(1,1,1),
             Callback = function(val)
                 setProperty(element.Path, val)
             end
@@ -1334,7 +1350,7 @@ for _, element in ipairs(espElements) do
             Text = element.Name,
             Min = element.Min,
             Max = element.Max,
-            Default = element.Default,
+            Default = element.Default or 6,
             Rounding = 1,
             Callback = function(val)
                 setProperty(element.Path, val)
