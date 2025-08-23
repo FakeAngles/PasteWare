@@ -26,6 +26,7 @@ if bypass_adonis then
                     local o; o = hookfunction(x, function(c, f, n)
                         if c ~= "_" then
                             if d then
+                                warn(`Adonis AntiCheat flagged\nMethod: {c}\nInfo: {f}`)
                             end
                         end
                         
@@ -38,6 +39,7 @@ if bypass_adonis then
                     y = b
                     local o; o = hookfunction(y, function(f)
                         if d then
+                            warn(`Adonis AntiCheat tried to kill (fallback): {f}`)
                         end
                     end)
                     table.insert(h, y)
@@ -765,30 +767,47 @@ end)
 
 local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     local Main = FieldOfViewBOX:AddTab("Visuals")
+    local Camera = workspace.CurrentCamera
 
     Main:AddToggle("Visible", {Text = "Show FOV Circle"})
-        :AddColorPicker("Color", {Default = Color3.fromRGB(54, 57, 241)})
-        :OnChanged(function()
-            fov_circle.Visible = Toggles.Visible.Value
-            SilentAimSettings.FOVVisible = Toggles.Visible.Value
+        :OnChanged(function(val)
+            fov_circle.Visible = val
+            SilentAimSettings.FOVVisible = val
         end)
+
+    Main:AddLabel("FOV Circle Color")
+        :AddColorPicker("FOVColor", {
+            Default = Color3.fromRGB(54, 57, 241),
+            Callback = function(val)
+                fov_circle.Color = val
+                SilentAimSettings.FOVColor = val
+            end
+        })
 
     Main:AddSlider("Radius", {
-        Text = "FOV Circle Radius", 
-        Min = 0, 
-        Max = 360, 
-        Default = 130, 
-        Rounding = 0
-    }):OnChanged(function()
-        fov_circle.Radius = Options.Radius.Value
-        SilentAimSettings.FOVRadius = Options.Radius.Value
-    end)
+        Text = "FOV Circle Radius",
+        Min = 0,
+        Max = 360,
+        Default = 130,
+        Rounding = 0,
+        Callback = function(val)
+            fov_circle.Radius = val
+            SilentAimSettings.FOVRadius = val
+        end
+    })
 
     Main:AddToggle("MousePosition", {Text = "Show Silent Aim Target"})
-        :AddColorPicker("MouseVisualizeColor", {Default = Color3.fromRGB(54, 57, 241)})
-        :OnChanged(function()
-            SilentAimSettings.ShowSilentAimTarget = Toggles.MousePosition.Value
+        :OnChanged(function(val)
+            SilentAimSettings.ShowSilentAimTarget = val
         end)
+
+    Main:AddLabel("Mouse Target Color")
+        :AddColorPicker("MouseVisualizeColor", {
+            Default = Color3.fromRGB(54, 57, 241),
+            Callback = function(val)
+                SilentAimSettings.MouseColor = val
+            end
+        })
 
     Main:AddDropdown("PlayerDropdown", {
         SpecialType = "Player",
@@ -797,6 +816,12 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         Multi = true
     })
 end
+
+game:GetService("RunService").RenderStepped:Connect(function()
+    if fov_circle.Visible then
+        fov_circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    end
+end)
 
 local previousHighlight = nil
 local function removeOldHighlight()
@@ -2428,4 +2453,3 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
-
