@@ -341,9 +341,25 @@ ScreenGui.Parent = game.CoreGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 OpenButton.Parent = ScreenGui
+OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) 
+OpenButton.Size = UDim2.new(0, 80, 0, 30)
+OpenButton.Position = UDim2.new(1, 100, 0.5, -15) 
+OpenButton.Text = "menu"
+OpenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+OpenButton.Font = Enum.Font.Code
+OpenButton.TextSize = 14
+OpenButton.BorderSizePixel = 0
+OpenButton.Active = true
+
+local ScreenGui = Instance.new("ScreenGui")
+local OpenButton = Instance.new("TextButton")
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+OpenButton.Parent = ScreenGui
 OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 OpenButton.Size = UDim2.new(0, 80, 0, 30)
-OpenButton.Position = UDim2.new(1, 100, 0.5, -15)
+OpenButton.Position = UDim2.new(1, -100, 0.5, -15)
 OpenButton.Text = "OPEN"
 OpenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 OpenButton.Font = Enum.Font.Code
@@ -353,7 +369,7 @@ OpenButton.Active = true
 
 local UIStroke = Instance.new("UIStroke")
 UIStroke.Thickness = 1.5
-UIStroke.Color = Color3.fromRGB(0, -110, 255)
+UIStroke.Color = Color3.fromRGB(0, 110, 255)
 UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 UIStroke.Parent = OpenButton
 
@@ -1459,33 +1475,48 @@ worldbox:AddToggle("nebula_theme", {
     Callback = function(state)
         nebulaEnabled = state
         if state then
-            local b = Instance.new("BloomEffect", lighting) b.Intensity, b.Size, b.Threshold, b.Name = 0.7, 24, 1, "NebulaBloom"
-            local c = Instance.new("ColorCorrectionEffect", lighting) c.Saturation, c.Contrast, c.TintColor, c.Name = 0.5, 0.2, nebulaThemeColor, "NebulaColorCorrection"
-            local a = Instance.new("Atmosphere", lighting) a.Density, a.Offset, a.Glare, a.Haze, a.Color, a.Decay, a.Name = 0.4, 0.25, 1, 2, nebulaThemeColor, Color3.fromRGB(25, 25, 112), "NebulaAtmosphere"
+            local b = Instance.new("BloomEffect", lighting) 
+            b.Intensity, b.Size, b.Threshold, b.Name = 0.7, 24, 1, "NebulaBloom"
+
+            local c = Instance.new("ColorCorrectionEffect", lighting) 
+            c.Saturation, c.Contrast, c.TintColor, c.Name = 0.5, 0.2, nebulaThemeColor, "NebulaColorCorrection"
+
+            local a = Instance.new("Atmosphere", lighting) 
+            a.Density, a.Offset, a.Glare, a.Haze, a.Color, a.Decay, a.Name = 0.4, 0.25, 1, 2, nebulaThemeColor, Color3.fromRGB(25, 25, 112), "NebulaAtmosphere"
+
             lighting.Ambient, lighting.OutdoorAmbient = nebulaThemeColor, nebulaThemeColor
             lighting.FogStart, lighting.FogEnd = 100, 500
             lighting.FogColor = nebulaThemeColor
         else
             for _, v in pairs({"NebulaBloom", "NebulaColorCorrection", "NebulaAtmosphere"}) do
-                local obj = lighting:FindFirstChild(v) if obj then obj:Destroy() end
+                local obj = lighting:FindFirstChild(v) 
+                if obj then obj:Destroy() end
             end
             lighting.Ambient, lighting.OutdoorAmbient = originalAmbient, originalOutdoorAmbient
             lighting.FogStart, lighting.FogEnd = originalFogStart, originalFogEnd
             lighting.FogColor = originalFogColor
         end
     end,
-}):AddColorPicker("nebula_color_picker", {
-    Text = "Nebula Color", Default = Color3.fromRGB(173, 216, 230),
-    Callback = function(c)
-        nebulaThemeColor = c
-        if nebulaEnabled then
-            local nc = lighting:FindFirstChild("NebulaColorCorrection") if nc then nc.TintColor = c end
-            local na = lighting:FindFirstChild("NebulaAtmosphere") if na then na.Color = c end
-            lighting.Ambient, lighting.OutdoorAmbient = c, c
-            lighting.FogColor = c
-        end
-    end,
 })
+
+worldbox:AddLabel("Nebula Color")
+    :AddColorPicker("nebula_color_picker", {
+        Default = Color3.fromRGB(173, 216, 230),
+        Callback = function(c)
+            nebulaThemeColor = c
+            if nebulaEnabled then
+                local nc = lighting:FindFirstChild("NebulaColorCorrection") 
+                if nc then nc.TintColor = c end
+
+                local na = lighting:FindFirstChild("NebulaAtmosphere") 
+                if na then na.Color = c end
+
+                lighting.Ambient, lighting.OutdoorAmbient = c, c
+                lighting.FogColor = c
+            end
+        end
+    })
+
 
 
 local Lighting = game:GetService("Lighting")
@@ -2453,4 +2484,3 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
-
