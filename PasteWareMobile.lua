@@ -26,7 +26,6 @@ if bypass_adonis then
                     local o; o = hookfunction(x, function(c, f, n)
                         if c ~= "_" then
                             if d then
-                                warn(`Adonis AntiCheat flagged\nMethod: {c}\nInfo: {f}`)
                             end
                         end
                         
@@ -39,7 +38,6 @@ if bypass_adonis then
                     y = b
                     local o; o = hookfunction(y, function(f)
                         if d then
-                            warn(`Adonis AntiCheat tried to kill (fallback): {f}`)
                         end
                     end)
                     table.insert(h, y)
@@ -2430,3 +2428,4 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
