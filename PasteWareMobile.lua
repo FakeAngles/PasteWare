@@ -353,7 +353,7 @@ OpenButton.Active = true
 
 local UIStroke = Instance.new("UIStroke")
 UIStroke.Thickness = 1.5
-UIStroke.Color = Color3.fromRGB(0, 110, 255)
+UIStroke.Color = Color3.fromRGB(0, -110, 255)
 UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 UIStroke.Parent = OpenButton
 
@@ -2453,3 +2453,4 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
