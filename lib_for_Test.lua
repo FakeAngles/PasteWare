@@ -1,6 +1,6 @@
 local Players = cloneref(game:GetService("Players"))
 local RunService = cloneref(game:GetService("RunService"))
-local UserInputService = cloneref(game:GetService("UserInputService"))
+local InputService = cloneref(game:GetService("UserInputService"))
 local CoreGui = cloneref(game:GetService("CoreGui"))
 local TextService = cloneref(game:GetService("TextService"))
 local TweenService = game:GetService('TweenService');
@@ -3634,3 +3634,4 @@ Players.PlayerRemoving:Connect(OnPlayerChange);
 getgenv().Library = Library
 
 return Library
+
