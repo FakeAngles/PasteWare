@@ -1875,148 +1875,171 @@ local function modifyWeaponSettings(property, value)
     end
 end
 
+--not final code need optimize FindFirstChild... Cuz can make FinFirstChilde true withous find 1 and find 2 only find 1
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local isRPGSpamEnabled = false
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+local isTankSpamEnabled = false
 local spamSpeed = 1
-local rocketsToFire = 1
-local selectedMode = "Rocket"
-local RocketSystem, FireRocket, FireRocketClient
-local rocketNumber = 1
+local shellsToFire = 1
+local shellNumber = 1
 
-local function startRPGSpam()
-    if not isRPGSpamEnabled then return end
-    if not RocketSystem then
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        RocketSystem = ReplicatedStorage:WaitForChild("RocketSystem")
-        FireRocket = RocketSystem:WaitForChild("Events"):WaitForChild("FireRocket")
-        FireRocketClient = RocketSystem:WaitForChild("Events"):WaitForChild("FireRocketClient")
-    end
+local FireTurret, RegisterTurretHit
 
-    local function getActiveWeapon()
-        local validWeapons = {"RPG", "Javelin", "Stinger"}
-        for _, weaponName in ipairs(validWeapons) do
-            local weapon = workspace[LocalPlayer.Name]:FindFirstChild(weaponName)
-            if weapon and weapon:IsA("Tool") and weapon.Parent == workspace[LocalPlayer.Name] then
-                return weaponName
+
+local function getTank()
+    local tankWorkspace = Workspace:FindFirstChild("Game Systems") 
+        and Workspace["Game Systems"]:FindFirstChild("Tank Workspace")
+    if not tankWorkspace then return nil end
+
+    local closestTank = nil
+    local shortestDistance = math.huge
+
+    for _, tank in pairs(tankWorkspace:GetChildren()) do
+        if tank:FindFirstChild("Misc") and tank.Misc:FindFirstChild("Turrets") then
+            local tankPos = (tank.PrimaryPart and tank.PrimaryPart.Position) or Vector3.new()
+            local playerPos = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position) or Vector3.new()
+            local distance = (tankPos - playerPos).Magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                closestTank = tank
             end
         end
-        return nil
     end
 
-    local activeWeapon = getActiveWeapon()
-    if not activeWeapon then return end
-    for i = 1, rocketsToFire do
-        if not isRPGSpamEnabled then return end
+    return closestTank
+end
+
+local function getTurretSmokeAndSettings(tank)
+    if not tank:FindFirstChild("Misc") or not tank.Misc:FindFirstChild("Turrets") then return nil, nil, nil end
+    local turretsFolder = tank.Misc.Turrets
+
+    for _, turretGroup in pairs(turretsFolder:GetChildren()) do
+        if turretGroup:IsA("Folder") or turretGroup:IsA("Model") then
+            for _, turret in pairs(turretGroup:GetChildren()) do
+                if turret:IsA("BasePart") or turret:IsA("Model") then
+                    local smoke = turret:FindFirstChild("SmokePart")
+                    local module = turret:FindFirstChildOfClass("ModuleScript")
+                    if smoke and module then
+                        local settings = require(module)
+                        return turret, smoke, settings
+                    end
+                end
+            end
+        end
+    end
+
+    return nil, nil, nil
+end
+
+local function startTankSpam()
+    if not FireTurret or not RegisterTurretHit then
+        FireTurret = ReplicatedStorage.BulletFireSystem:WaitForChild("FireTurret")
+        RegisterTurretHit = ReplicatedStorage.BulletFireSystem:WaitForChild("RegisterTurretHit")
+    end
+
+    local tank = getTank()
+    if not tank then return end
+
+    local turret, smoke, settings = getTurretSmokeAndSettings(tank)
+    if not turret or not smoke or not settings then return end
+
+    for i = 1, shellsToFire do
+        if not isTankSpamEnabled then return end
+
         local targetHead = getClosestPlayer()
         if not targetHead then return end
-        local targetPosition = targetHead.Position
-        local directionToTarget = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).unit
-        if selectedMode == "Rocket" then
-            FireRocket:InvokeServer(directionToTarget, workspace[LocalPlayer.Name][activeWeapon], workspace[LocalPlayer.Name][activeWeapon], targetPosition)
-            FireRocketClient:Fire(
-                targetPosition,
-                directionToTarget,
-                {
-                    ["expShake"] = {["fadeInTime"] = 0.05, ["magnitude"] = 3, ["rotInfluence"] = {0.4, 0, 0.4}, ["fadeOutTime"] = 0.5, ["posInfluence"] = {1, 1, 0}, ["roughness"] = 3},
-                    ["gravity"] = Vector3.new(0, -20, 0),
-                    ["HelicopterDamage"] = 450,
-                    ["FireRate"] = 15,
-                    ["VehicleDamage"] = 350,
-                    ["ExpName"] = RPG,
-                    ["ExpRadius"] = 12,
-                    ["BoatDamage"] = 300,
-                    ["TankDamage"] = 300,
-                    ["Acceleration"] = 8,
-                    ["ShieldDamage"] = 170,
-                    ["Distance"] = 4000,
-                    ["PlaneDamage"] = 500,
-                    ["GunshipDamage"] = 170,
-                    ["velocity"] = 200,
-                    ["ExplosionDamage"] = 120
-                },
-                RocketSystem.Rockets["RPG Rocket"],
-                workspace[LocalPlayer.Name][activeWeapon],
-                workspace[LocalPlayer.Name][activeWeapon],
-                LocalPlayer
-            )
-        elseif selectedMode == "Explode" then
-            FireRocket:InvokeServer(directionToTarget, workspace[LocalPlayer.Name][activeWeapon], workspace[LocalPlayer.Name][activeWeapon], targetPosition)
-            local RS = game:GetService("ReplicatedStorage").RocketSystem.Events
-            RS.RocketHit:FireServer(
-                targetPosition, 
-                directionToTarget, 
-                workspace[LocalPlayer.Name][activeWeapon],  
-                workspace[LocalPlayer.Name][activeWeapon], 
-                targetHead, 
-                targetHead, 
-                LocalPlayer.Name .. "Rocket" .. rocketNumber 
-            )
-            rocketNumber = rocketNumber + 1 
-        end
+
+        local origin = smoke.Position
+        local targetPos = targetHead.Position
+        local direction = (targetPos - origin).Unit
+
+        FireTurret:FireServer(
+            tank,
+            turret,
+            nil,
+            nil,
+            nil,
+            nil,
+            { {Workspace[LocalPlayer.Name], turret, Workspace.LocalPartStorage} },
+            true
+        )
+
+        RegisterTurretHit:FireServer(
+            turret,
+            smoke,
+            tank,
+            {
+                normal = Vector3.new(0, 1, 0),
+                hitPart = targetHead,
+                origin = origin,
+                hitPoint = targetPos,
+                direction = direction
+            },
+            {
+                OverheatCount = settings.OverheatCount or 1,
+                CooldownTime = settings.CooldownTime or 10,
+                BulletSpread = settings.BulletSpread or 0.05,
+                FireRate = settings.FireRate or 18
+            }
+        )
+
+        shellNumber += 1
     end
 end
 
-
-WarTycoonBox:AddToggle("RPG Spam", {
-    Text = "Toggle rockets Spam",
+WarTycoonBox:AddToggle("Tank Spam", {
+    Text = "Toggle Tank Spam",
     Default = false,
-    Tooltip = "RPG | JAVELIN | STINGER.",
+    Tooltip = "using silent aim fov",
     Callback = function(value)
-        isRPGSpamEnabled = value
+        isTankSpamEnabled = value
     end,
-}):AddKeyPicker("RPG Spam Key", {
+})
+:AddKeyPicker("Tank Spam Key", {
     Default = "Q",
     SyncToggleState = true,
-    Mode = "Toggle",  
-    Text = "Rockets Spam Key",
-    Tooltip = "RPG | JAVELIN | STINGER",
+    Mode = "Toggle",
+    Text = "Tank Spam Key",
+    Tooltip = "Toggle Tank Spam",
     Callback = function()
-        if isRPGSpamEnabled then
-            startRPGSpam()
+        if isTankSpamEnabled then
+            startTankSpam()
         end
     end,
 })
 
-WarTycoonBox:AddSlider("Rocket Count", {
-    Text = "Rockets per Spam",
+WarTycoonBox:AddSlider("Shell Count", {
+    Text = "Shells per Spam",
     Default = 1,
     Min = 1,
-    Max = 500000,
+    Max = 500,
     Rounding = 0,
-    Tooltip = "Adjust how many rockets to fire at once.",
+    Tooltip = "Adjust how many shells to fire at once.",
     Callback = function(value)
-        rocketsToFire = math.floor(value)
+        shellsToFire = math.floor(value)
     end,
 })
 
 WarTycoonBox:AddSlider("Spam Speed", {
-    Text = "Rockets Spam Speed",
+    Text = "Spam Speed",
     Default = 1,
-    Min = 0.1,
+    Min = 0.01,
     Max = 5,
-    Rounding = 1,
-    Tooltip = "Adjust the speed of RPG spam.",
+    Rounding = 2,
+    Tooltip = "Adjust the speed of Tank spam.",
     Callback = function(value)
         spamSpeed = value
     end,
 })
 
-WarTycoonBox:AddDropdown("RPG Mode", {
-    Text = "Select Rocket Mode",
-    Values = {"Rocket", "Explode"},
-    Default = "Rocket",
-    Tooltip = "Choose between Rocket spam or Explode mode.",
-    Multi = false,
-    Callback = function(value)
-        selectedMode = value
-    end,
-})
-
-game:GetService("RunService").Heartbeat:Connect(function()
-    if isRPGSpamEnabled then
-        wait(math.max(0.01, 1 / spamSpeed))
-        startRPGSpam()
+RunService.Heartbeat:Connect(function()
+    if isTankSpamEnabled then
+        task.wait(math.max(0.01, 1 / spamSpeed))
+        startTankSpam()
     end
 end)
 
@@ -2439,4 +2462,3 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
-
