@@ -1924,8 +1924,6 @@ local function modifyWeaponSettings(property, value)
     local player = game:GetService("Players").LocalPlayer
     local backpack = player:WaitForChild("Backpack")
     local character = player.Character or player.CharacterAdded:Wait()
-    local foundModules = {}
-
 
     local function findSettingsInWarTycoon(item)
         local weaponName = item.Name
@@ -1936,51 +1934,47 @@ local function modifyWeaponSettings(property, value)
         return nil
     end
 
-    if getgenv().WarTycoon then
-        if getgenv().WeaponOnHands then
-            local toolInHand = character:FindFirstChildOfClass("Tool")
-            if toolInHand then
-                local settingsModule = findSettingsInWarTycoon(toolInHand)
-                if settingsModule then
-                    local success, module = pcall(function() return require(settingsModule) end)
-                    if success and module[property] ~= nil then
-                        module[property] = value
-                    end
-                end
-            end
-        else
-            for _, item in pairs(backpack:GetChildren()) do
-                local settingsModule = findSettingsInWarTycoon(item)
-                if settingsModule then
-                    local success, module = pcall(function() return require(settingsModule) end)
-                    if success and module[property] ~= nil then
-                        module[property] = value
-                    end
-                end
+    local function applyAttribute(weapon)
+        if weapon and weapon:IsA("Tool") then
+            pcall(function()
+                weapon:SetAttribute(property, value)
+            end)
+        end
+    end
+
+    local function applyRequireModule(settingsModule)
+        if settingsModule then
+            local success, module = pcall(function() return require(settingsModule) end)
+            if success and module[property] ~= nil then
+                module[property] = value
             end
         end
-    else
-        if getgenv().WeaponOnHands then
-            local toolInHand = character:FindFirstChildOfClass("Tool")
-            if toolInHand then
-                local settingsModule = findSettingsModule(toolInHand)
-                if settingsModule then
-                    local success, module = pcall(function() return require(settingsModule) end)
-                    if success and module[property] ~= nil then
-                        module[property] = value
-                    end
-                end
-            end
+    end
+
+    local useAttribute = getgenv().WeaponModifyMethod == "Attribute"
+
+    local function processWeapon(weapon)
+        if useAttribute then
+            applyAttribute(weapon)
         else
-            for _, item in pairs(backpack:GetChildren()) do
-                local settingsModule = findSettingsModule(item)
-                if settingsModule then
-                    local success, module = pcall(function() return require(settingsModule) end)
-                    if success and module[property] ~= nil then
-                        module[property] = value
-                    end
-                end
+            local settingsModule
+            if getgenv().WarTycoon then
+                settingsModule = findSettingsInWarTycoon(weapon)
+            else
+                settingsModule = findSettingsModule(weapon)
             end
+            applyRequireModule(settingsModule)
+        end
+    end
+
+    if getgenv().WeaponOnHands then
+        local toolInHand = character:FindFirstChildOfClass("Tool")
+        if toolInHand then
+            processWeapon(toolInHand)
+        end
+    else
+        for _, item in pairs(backpack:GetChildren()) do
+            processWeapon(item)
         end
     end
 end
@@ -2290,13 +2284,28 @@ ACSEngineBox:AddToggle("WeaponOnHands", {
     end
 })
 
+ACSEngineBox:AddDropdown("WeaponModifyMethod", {
+    Text = "Weapon Modify Method",
+    Default = "Attribute",
+    Values = {"Attribute", "Require"},
+    Tooltip = "Choose how to modify weapon settings",
+    Callback = function(value)
+        getgenv().WeaponModifyMethod = value
+    end
+})
+
 ACSEngineBox:AddButton('INF AMMO', function()
     modifyWeaponSettings("Ammo", math.huge)
 end)
 
 ACSEngineBox:AddButton('NO RECOIL | NO SPREAD', function()
-    modifyWeaponSettings("VRecoil", {0, 0})
-    modifyWeaponSettings("HRecoil", {0, 0})
+    if getgenv().WeaponModifyMethod == "Attribute" then
+        modifyWeaponSettings("VRecoil", Vector2.new(0, 0))
+        modifyWeaponSettings("HRecoil", Vector2.new(0, 0))
+    else
+        modifyWeaponSettings("VRecoil", {0, 0})
+        modifyWeaponSettings("HRecoil", {0, 0})
+    end
     modifyWeaponSettings("MinSpread", 0)
     modifyWeaponSettings("MaxSpread", 0)
     modifyWeaponSettings("RecoilPunch", 0)
@@ -2321,16 +2330,16 @@ ACSEngineBox:AddButton('CHANGE BULLET SPEED', function()
     modifyWeaponSettings("MuzzleVelocity", getgenv().bulletSpeedValue or 10000)
 end)
 
-local fireRateInput
-fireRateInput = ACSEngineBox:AddInput('FireRateInput', {
+local fireRateInput = ACSEngineBox:AddInput('FireRateInput', {
     Text = 'Enter Fire Rate',
     Default = '8888',
     Tooltip = 'Type the fire rate value you want to apply.',
 })
 
 ACSEngineBox:AddButton('CHANGE FIRE RATE', function()
-    modifyWeaponSettings("FireRate", tonumber(fireRateInput.Value) or 8888)
-    modifyWeaponSettings("ShootRate", tonumber(fireRateInput.Value) or 8888)
+    local rate = tonumber(fireRateInput.Value) or 8888
+    modifyWeaponSettings("FireRate", rate)
+    modifyWeaponSettings("ShootRate", rate)
 end)
 
 local bulletsInput = ACSEngineBox:AddInput('BulletsInput', {
@@ -2341,12 +2350,11 @@ local bulletsInput = ACSEngineBox:AddInput('BulletsInput', {
 })
 
 ACSEngineBox:AddButton('MULTI BULLETS', function()
-    local bulletsValue = tonumber(Options.BulletsInput.Value) or 50
+    local bulletsValue = tonumber(bulletsInput.Value) or 50
     modifyWeaponSettings("Bullets", bulletsValue)
 end)
 
-local inputField
-inputField = ACSEngineBox:AddInput('FireModeInput', {
+local inputField = ACSEngineBox:AddInput('FireModeInput', {
     Text = 'Enter Fire Mode',
     Default = 'Auto',
     Tooltip = 'Type the fire mode you want to apply.',
@@ -2511,4 +2519,3 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
-
