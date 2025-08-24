@@ -1985,6 +1985,7 @@ local function modifyWeaponSettings(property, value)
     end
 end
 
+--not final code need optimize FindFirstChild... Cuz can make FinFirstChilde true withous find 1 and find 2 only find 1
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
@@ -2000,6 +2001,7 @@ local FireTurret, RegisterTurretHit
 
 
 local function getTank()
+    if not masterToggle then return end
     local tankWorkspace = Workspace:FindFirstChild("Game Systems") 
         and Workspace["Game Systems"]:FindFirstChild("Tank Workspace")
     if not tankWorkspace then return nil end
@@ -2023,6 +2025,7 @@ local function getTank()
 end
 
 local function getTurretSmokeAndSettings(tank)
+    if not masterToggle then return end
     if not tank:FindFirstChild("Misc") or not tank.Misc:FindFirstChild("Turrets") then return nil, nil, nil end
     local turretsFolder = tank.Misc.Turrets
 
@@ -2045,6 +2048,7 @@ local function getTurretSmokeAndSettings(tank)
 end
 
 local function startTankSpam()
+    if not masterToggle then return end
     if not FireTurret or not RegisterTurretHit then
         FireTurret = ReplicatedStorage.BulletFireSystem:WaitForChild("FireTurret")
         RegisterTurretHit = ReplicatedStorage.BulletFireSystem:WaitForChild("RegisterTurretHit")
@@ -2507,3 +2511,4 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
