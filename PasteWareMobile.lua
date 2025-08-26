@@ -26,7 +26,6 @@ if bypass_adonis then
                     local o; o = hookfunction(x, function(c, f, n)
                         if c ~= "_" then
                             if d then
-                                warn(`Adonis AntiCheat flagged\nMethod: {c}\nInfo: {f}`)
                             end
                         end
                         
@@ -39,7 +38,6 @@ if bypass_adonis then
                     y = b
                     local o; o = hookfunction(y, function(f)
                         if d then
-                            warn(`Adonis AntiCheat tried to kill (fallback): {f}`)
                         end
                     end)
                     table.insert(h, y)
@@ -63,6 +61,51 @@ if bypass_adonis then
 
         setthreadidentity(7)
     end)
+end
+
+if not getgenv().ScriptState then
+    getgenv().ScriptState = {
+        isLockedOn = false,
+        targetPlayer = nil,
+        lockEnabled = false,
+        aimLockEnabled = false,
+        smoothingFactor = 0.1,
+        predictionFactor = 0.0,
+        bodyPartSelected = "Head",
+        ClosestHitPart = nil,
+        previousHighlight = nil,
+        lockedTime = 12,
+        reverseResolveIntensity = 5,
+        Desync = false,
+        DesyncEnabled = false,
+        antiLockEnabled = false,
+        resolverIntensity = 1.0,
+        resolverMethod = "Recalculate",
+        shellNumber = 1,
+        isTankSpamEnabled = false,
+        spamSpeed = 1,
+        shellsToFire = 1,
+        masterToggle = false,
+        fovEnabled = false,
+        nebulaEnabled = false,
+        fovValue = 70,
+        SelfChamsEnabled = false,
+        RainbowChamsEnabled = false,
+        SelfChamsColor = Color3.fromRGB(255, 255, 255),
+        ChamsEnabled = false,
+        isSpeedActive = false,
+        isFlyActive = false,
+        isNoClipActive = false,
+        isFunctionalityEnabled = true,
+        flySpeed = 1,
+        Cmultiplier = 1,
+        strafeEnabled = false,
+        strafeAllowed = true,
+        strafeSpeed = 50,
+        strafeRadius = 5,
+        strafeMode = "Horizontal",
+        originalCameraMode = nil
+    }
 end
 
 local SilentAimSettings = {
@@ -147,6 +190,7 @@ local ExpectedArguments = {
     }
 }
 
+
 function CalculateChance(Percentage)
 
     Percentage = math.floor(Percentage)
@@ -203,10 +247,8 @@ end
 
 local function getClosestPlayer()
     if not Options.TargetPart.Value then return end
-    local Camera = workspace.CurrentCamera
     local Closest
     local DistanceToMouse
-    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     local ignoredPlayers = Options.PlayerDropdown.Value 
 
     for _, Player in next, GetPlayers(Players) do
@@ -220,7 +262,7 @@ local function getClosestPlayer()
         if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
         local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
         if not OnScreen then continue end
-        local Distance = (center - ScreenPosition).Magnitude
+        local Distance = (getMousePosition() - ScreenPosition).Magnitude
         if Distance <= (DistanceToMouse or Options.Radius.Value or 2000) then
             Closest = ((Options.TargetPart.Value == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[Options.TargetPart.Value])
             DistanceToMouse = Distance
@@ -229,19 +271,12 @@ local function getClosestPlayer()
     return Closest
 end
 
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
-
-local isLockedOn = false
-local targetPlayer = nil
-local lockEnabled = false
-local smoothingFactor = 0.1
-local predictionFactor = 0.0
-local bodyPartSelected = "Head"
-local aimLockEnabled = false 
 
 
 local function getBodyPart(character, part)
@@ -249,14 +284,14 @@ local function getBodyPart(character, part)
 end
 
 local function getNearestPlayerToMouse()
-    if not aimLockEnabled then return nil end 
+    if not ScriptState.aimLockEnabled then return nil end 
     local nearestPlayer = nil
     local shortestDistance = math.huge
     local mousePosition = Camera:ViewportPointToRay(Mouse.X, Mouse.Y).Origin
 
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(bodyPartSelected) then
-            local part = player.Character[bodyPartSelected]
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(ScriptState.bodyPartSelected) then
+            local part = player.Character[ScriptState.bodyPartSelected]
             local screenPosition, onScreen = Camera:WorldToViewportPoint(part.Position)
             if onScreen then
                 local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude
@@ -271,17 +306,17 @@ local function getNearestPlayerToMouse()
 end
 
 local function toggleLockOnPlayer()
-    if not lockEnabled or not aimLockEnabled then return end
+    if not ScriptState.lockEnabled or not ScriptState.aimLockEnabled then return end
 
-    if isLockedOn then
-        isLockedOn = false
-        targetPlayer = nil
+    if ScriptState.isLockedOn then
+        ScriptState.isLockedOn = false
+        ScriptState.targetPlayer = nil
     else
-        targetPlayer = getNearestPlayerToMouse()
-        if targetPlayer and targetPlayer.Character then
-            local part = getBodyPart(targetPlayer.Character, bodyPartSelected)
-            if targetPlayer.Character:FindFirstChild(part) then
-                isLockedOn = true
+        ScriptState.targetPlayer = getNearestPlayerToMouse()
+        if ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
+            local part = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
+            if ScriptState.targetPlayer.Character:FindFirstChild(part) then
+                ScriptState.isLockedOn = true
             end
         end
     end
@@ -289,27 +324,30 @@ end
 
 
 RunService.RenderStepped:Connect(function()
-    if aimLockEnabled and lockEnabled and isLockedOn and targetPlayer and targetPlayer.Character then
-        local partName = getBodyPart(targetPlayer.Character, bodyPartSelected)
-        local part = targetPlayer.Character:FindFirstChild(partName)
+    if ScriptState.aimLockEnabled and ScriptState.lockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
+        local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
+        local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
 
-        if part and targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
-            local predictedPosition = part.Position + (part.AssemblyLinearVelocity * predictionFactor)
+        if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
+            local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
             local currentCameraPosition = Camera.CFrame.Position
 
-            Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, smoothingFactor)
+            Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
         else
-            isLockedOn = false
-            targetPlayer = nil
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
         end
     end
 end)
 
 
 
+
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare/refs/heads/main/mobileLib.lua"))()
 local ThemeManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare/refs/heads/main/manage2.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare/refs/heads/main/manager.lua"))()
+
+Library.KeybindFrame.Visible = false;
 
 local Window = Library:CreateWindow({
     Title = 'PasteWare  |  github.com/FakeAngles',
@@ -330,6 +368,8 @@ local VisualsTab = Window:AddTab("Visuals")
 local settingsTab = Window:AddTab("Settings")
 local MenuGroup = settingsTab:AddLeftGroupbox("Menu")
 MenuGroup:AddButton("Unload", function() Library:Unload() end)
+MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "End", NoUI = true, Text = "Menu keybind" })
+Library.ToggleKeybind = Options.MenuKeybind
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 ThemeManager:ApplyToTab(settingsTab)
@@ -375,11 +415,6 @@ UIStroke.Parent = OpenButton
 
 OpenButton.MouseButton1Click:Connect(function()
     Library:Toggle()
-    if Library:IsOpen() then
-        OpenButton.Text = "CLOSE"
-    else
-        OpenButton.Text = "OPEN"
-    end
 end)
 
 local dragging, dragInput, dragStart, startPos
@@ -424,11 +459,11 @@ aimbox:AddToggle("aimLock_Enabled", {
     Default = false,
     Tooltip = "Toggle the AimLock feature on or off.",
     Callback = function(value)
-        aimLockEnabled = value
-        if not aimLockEnabled then
-            lockEnabled = false
-            isLockedOn = false
-            targetPlayer = nil
+        ScriptState.aimLockEnabled = value
+        if not ScriptState.aimLockEnabled then
+            ScriptState.lockEnabled = false
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
         end
     end
 })
@@ -438,10 +473,10 @@ aimbox:AddToggle("aim_Enabled", {
     Default = false,
     Tooltip = "Toggle AimLock on or off.",
     Callback = function(value)
-        lockEnabled = value
-        if not lockEnabled then
-            isLockedOn = false
-            targetPlayer = nil
+        ScriptState.lockEnabled = value
+        if not ScriptState.lockEnabled then
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
         end
     end,
 }):AddKeyPicker("aim_Enabled_KeyPicker", {
@@ -463,7 +498,7 @@ aimbox:AddSlider("Smoothing", {
     Rounding = 2,
     Tooltip = "Adjust camera smoothing factor.",
     Callback = function(value)
-        smoothingFactor = value
+        ScriptState.smoothingFactor = value
     end,
 })
 
@@ -476,7 +511,7 @@ aimbox:AddSlider("Prediction", {
     Rounding = 2,
     Tooltip = "Adjust prediction for target movement.",
     Callback = function(value)
-        predictionFactor = value
+        ScriptState.predictionFactor = value
     end,
 })
 
@@ -487,19 +522,18 @@ aimbox:AddDropdown("BodyParts", {
     Text = "Target Body Part",
     Tooltip = "Select which body part to lock onto.",
     Callback = function(value)
-        bodyPartSelected = value
+        ScriptState.bodyPartSelected = value
     end,
 })
 
 
-local reverseResolveIntensity = 5
-getgenv().Desync = false
-getgenv().DesyncEnabled = false  
+getgenv().ScriptState.Desync = false
+getgenv().ScriptState.DesyncEnabled = false  
 
 
 game:GetService("RunService").Heartbeat:Connect(function()
-    if getgenv().DesyncEnabled then  
-        if getgenv().Desync then
+    if getgenv().ScriptState.DesyncEnabled then  
+        if getgenv().ScriptState.Desync then
             local player = game.Players.LocalPlayer
             local character = player.Character
             if not character then return end 
@@ -510,15 +544,15 @@ game:GetService("RunService").Heartbeat:Connect(function()
             local originalVelocity = humanoidRootPart.Velocity
 
             local randomOffset = Vector3.new(
-                math.random(-1, 1) * reverseResolveIntensity * 1000,
-                math.random(-1, 1) * reverseResolveIntensity * 1000,
-                math.random(-1, 1) * reverseResolveIntensity * 1000
+                math.random(-1, 1) * ScriptState.reverseResolveIntensity * 1000,
+                math.random(-1, 1) * ScriptState.reverseResolveIntensity * 1000,
+                math.random(-1, 1) * ScriptState.reverseResolveIntensity * 1000
             )
 
             humanoidRootPart.Velocity = randomOffset
             humanoidRootPart.CFrame = humanoidRootPart.CFrame * CFrame.Angles(
                 0,
-                math.random(-1, 1) * reverseResolveIntensity * 0.001,
+                math.random(-1, 1) * ScriptState.reverseResolveIntensity * 0.001,
                 0
             )
 
@@ -530,35 +564,35 @@ game:GetService("RunService").Heartbeat:Connect(function()
 end)
 
 velbox:AddToggle("desyncMasterEnabled", {
-    Text = "Enable Desync",
+    Text = "Enable ScriptState.Desync",
     Default = false,
-    Tooltip = "Enable or disable the entire desync system.",
+    Tooltip = "Enable or disable the entire ScriptState.desync system.",
     Callback = function(value)
-        getgenv().DesyncEnabled = value  
+        getgenv().ScriptState.DesyncEnabled = value  
     end
 })
 
 
-velbox:AddToggle("desyncEnabled", {
-    Text = "Desync keybind",
+velbox:AddToggle("ScriptState.desyncEnabled", {
+    Text = "ScriptState.Desync keybind",
     Default = false,
-    Tooltip = "Enable or disable reverse resolve desync.",
+    Tooltip = "Enable or disable reverse resolve ScriptState.desync.",
     Callback = function(value)
-        getgenv().Desync = value
+        getgenv().ScriptState.Desync = value
     end
 }):AddKeyPicker("desyncToggleKey", {
     Default = "V", 
     SyncToggleState = true,
     Mode = "Toggle",
-    Text = "Desync Toggle Key",
-    Tooltip = "Toggle to enable/disable velocity desync.",
+    Text = "ScriptState.Desync Toggle Key",
+    Tooltip = "Toggle to enable/disable velocity ScriptState.desync.",
     Callback = function(value)
-        getgenv().Desync = value
+        getgenv().ScriptState.Desync = value
     end
 })
 
 
-velbox:AddSlider("ReverseResolveIntensity", {
+velbox:AddSlider("ScriptState.ReverseResolveIntensity", {
     Text = "velocity intensity",
     Default = 5,
     Min = 1,
@@ -566,47 +600,42 @@ velbox:AddSlider("ReverseResolveIntensity", {
     Rounding = 0,
     Tooltip = "Adjust the intensity of the reverse resolve effect.",
     Callback = function(value)
-        reverseResolveIntensity = value
+        ScriptState.reverseResolveIntensity = value
     end
 })
 
 
 
-local antiLockEnabled = false
-local resolverIntensity = 1.0
-local resolverMethod = "Recalculate"
-
-
 RunService.RenderStepped:Connect(function()
-    if aimLockEnabled and isLockedOn and targetPlayer and targetPlayer.Character then
-        local partName = getBodyPart(targetPlayer.Character, bodyPartSelected)
-        local part = targetPlayer.Character:FindFirstChild(partName)
+    if ScriptState.aimLockEnabled and ScriptState.isLockedOn and ScriptState.targetPlayer and ScriptState.targetPlayer.Character then
+        local partName = getBodyPart(ScriptState.targetPlayer.Character, ScriptState.bodyPartSelected)
+        local part = ScriptState.targetPlayer.Character:FindFirstChild(partName)
 
-        if part and targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
-            local predictedPosition = part.Position + (part.AssemblyLinearVelocity * predictionFactor)
+        if part and ScriptState.targetPlayer.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
+            local predictedPosition = part.Position + (part.AssemblyLinearVelocity * ScriptState.predictionFactor)
 
-            if antiLockEnabled then
-                if resolverMethod == "Recalculate" then
+            if ScriptState.antiLockEnabled then
+                if ScriptState.resolverMethod == "Recalculate" then
 
-                    predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * resolverIntensity)
-                elseif resolverMethod == "Randomize" then
+                    predictedPosition = predictedPosition + (part.AssemblyLinearVelocity * ScriptState.resolverIntensity)
+                elseif ScriptState.resolverMethod == "Randomize" then
 
                     predictedPosition = predictedPosition + Vector3.new(
-                        math.random() * resolverIntensity - (resolverIntensity / 2),
-                        math.random() * resolverIntensity - (resolverIntensity / 2),
-                        math.random() * resolverIntensity - (resolverIntensity / 2)
+                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
+                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2),
+                        math.random() * ScriptState.resolverIntensity - (ScriptState.resolverIntensity / 2)
                     )
-                elseif resolverMethod == "Invert" then
+                elseif ScriptState.resolverMethod == "Invert" then
 
-                    predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * resolverIntensity * 2)
+                    predictedPosition = predictedPosition - (part.AssemblyLinearVelocity * ScriptState.resolverIntensity * 2)
                 end
             end
 
             local currentCameraPosition = Camera.CFrame.Position
-            Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, smoothingFactor)
+            Camera.CFrame = CFrame.new(currentCameraPosition, predictedPosition) * CFrame.new(0, 0, ScriptState.smoothingFactor)
         else
-            isLockedOn = false
-            targetPlayer = nil
+            ScriptState.isLockedOn = false
+            ScriptState.targetPlayer = nil
         end
     end
 end)
@@ -616,11 +645,11 @@ aimbox:AddToggle("antiLock_Enabled", {
     Default = false,
     Tooltip = "Toggle the Anti Lock Resolver on or off.",
     Callback = function(value)
-        antiLockEnabled = value
+        ScriptState.antiLockEnabled = value
     end,
 })
 
-aimbox:AddSlider("ResolverIntensity", {
+aimbox:AddSlider("ScriptState.ResolverIntensity", {
     Text = "Resolver Intensity",
     Default = 1.0,
     Min = 0,
@@ -628,7 +657,7 @@ aimbox:AddSlider("ResolverIntensity", {
     Rounding = 2,
     Tooltip = "Adjust the intensity of the Anti Lock Resolver.",
     Callback = function(value)
-        resolverIntensity = value
+        ScriptState.resolverIntensity = value
     end,
 })
 
@@ -639,7 +668,7 @@ aimbox:AddDropdown("ResolverMethods", {
     Text = "Resolver Method",
     Tooltip = "Select the method used by the Anti Lock Resolver.",
     Callback = function(value)
-        resolverMethod = value
+        ScriptState.resolverMethod = value
     end,
 })
 
@@ -663,9 +692,7 @@ Options.aim_Enabled_KeyPicker:OnClick(function()
     SilentAimSettings.Enabled = not SilentAimSettings.Enabled
     Toggles.aim_Enabled.Value = SilentAimSettings.Enabled
     Toggles.aim_Enabled:SetValue(SilentAimSettings.Enabled)
-    mouse_box.Visible = SilentAimSettings.Enabled
 end)
-
 
 Main:AddToggle("TeamCheck", {
     Text = "Team Check", 
@@ -780,50 +807,32 @@ Main:AddSlider("HitChance", {
     SilentAimSettings.HitChance = Options.HitChance.Value
 end)
 
-
 local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     local Main = FieldOfViewBOX:AddTab("Visuals")
-    local Camera = workspace.CurrentCamera
 
     Main:AddToggle("Visible", {Text = "Show FOV Circle"})
-        :OnChanged(function(val)
-            fov_circle.Visible = val
-            SilentAimSettings.FOVVisible = val
+        :AddColorPicker("Color", {Default = Color3.fromRGB(54, 57, 241)})
+        :OnChanged(function()
+            fov_circle.Visible = Toggles.Visible.Value
+            SilentAimSettings.FOVVisible = Toggles.Visible.Value
         end)
-
-    Main:AddLabel("FOV Circle Color")
-        :AddColorPicker("FOVColor", {
-            Default = Color3.fromRGB(54, 57, 241),
-            Callback = function(val)
-                fov_circle.Color = val
-                SilentAimSettings.FOVColor = val
-            end
-        })
 
     Main:AddSlider("Radius", {
-        Text = "FOV Circle Radius",
-        Min = 0,
-        Max = 360,
-        Default = 130,
-        Rounding = 0,
-        Callback = function(val)
-            fov_circle.Radius = val
-            SilentAimSettings.FOVRadius = val
-        end
-    })
+        Text = "FOV Circle Radius", 
+        Min = 0, 
+        Max = 360, 
+        Default = 130, 
+        Rounding = 0
+    }):OnChanged(function()
+        fov_circle.Radius = Options.Radius.Value
+        SilentAimSettings.FOVRadius = Options.Radius.Value
+    end)
 
     Main:AddToggle("MousePosition", {Text = "Show Silent Aim Target"})
-        :OnChanged(function(val)
-            SilentAimSettings.ShowSilentAimTarget = val
+        :AddColorPicker("MouseVisualizeColor", {Default = Color3.fromRGB(54, 57, 241)})
+        :OnChanged(function()
+            SilentAimSettings.ShowSilentAimTarget = Toggles.MousePosition.Value
         end)
-
-    Main:AddLabel("Mouse Target Color")
-        :AddColorPicker("MouseVisualizeColor", {
-            Default = Color3.fromRGB(54, 57, 241),
-            Callback = function(val)
-                SilentAimSettings.MouseColor = val
-            end
-        })
 
     Main:AddDropdown("PlayerDropdown", {
         SpecialType = "Player",
@@ -833,17 +842,10 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     })
 end
 
-game:GetService("RunService").RenderStepped:Connect(function()
-    if fov_circle.Visible then
-        fov_circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    end
-end)
-
-local previousHighlight = nil
 local function removeOldHighlight()
-    if previousHighlight then
-        previousHighlight:Destroy()
-        previousHighlight = nil
+    if ScriptState.previousHighlight then
+        ScriptState.previousHighlight:Destroy()
+        ScriptState.previousHighlight = nil
     end
 end
 
@@ -929,6 +931,7 @@ end
 
 hitSound.SoundId = sounds[Options.HitSoundSelect.Value]
 
+
 local soundPool = {}
 local soundIndex = 1
 
@@ -981,15 +984,17 @@ for _, plr in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(trackPlayer)
 
+
+
+
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 
-local ClosestHitPart = nil
 RunService.Heartbeat:Connect(function()
     if Toggles.aim_Enabled and Toggles.aim_Enabled.Value then
-        ClosestHitPart = getClosestPlayer()
+        ScriptState.ClosestHitPart = getClosestPlayer()
     else
-        ClosestHitPart = nil
+        ScriptState.ClosestHitPart = nil
     end
 end)
 
@@ -1012,7 +1017,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
 
     local HitPart = nil
     if Toggles.aim_Enabled and Toggles.aim_Enabled.Value and not checkcaller() and chance then
-        HitPart = ClosestHitPart
+        HitPart = ScriptState.ClosestHitPart
     end
 
     if HitPart and self == workspace then
@@ -1059,464 +1064,79 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     return oldNamecall(...)
 end))
 
-local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
-
-if not _G.ExunysESPLoaded then
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare/refs/heads/main/ESP.lua"))()
-end
-
-local ESP = getgenv().ExunysDeveloperESP
-if not ESP then return end 
-
-ESP.Settings = ESP.Settings or {}
-ESP.Settings.Enabled = false
-ESP.Properties = ESP.Properties or {}
-
-local queuedToggles = {
-    NameTag = false,
-    Box = false,
-    Tracer = false,
-    HeadDot = false,
-    HealthBar = false,
-}
-
-local function applyQueuedToggles()
-    if not ESP.Settings.Enabled or not ESP.Properties then return end
-
-    if ESP.Properties.ESP then ESP.Properties.ESP.DisplayName = queuedToggles.NameTag end
-    if ESP.Properties.Box then ESP.Properties.Box.Enabled = queuedToggles.Box end
-    if ESP.Properties.Tracer then ESP.Properties.Tracer.Enabled = queuedToggles.Tracer end
-    if ESP.Properties.HeadDot then ESP.Properties.HeadDot.Enabled = queuedToggles.HeadDot end
-    if ESP.Properties.HealthBar then ESP.Properties.HealthBar.Enabled = queuedToggles.HealthBar end
-end
-
-local function setToggle(name, value)
-    queuedToggles[name] = value
-    applyQueuedToggles()
-end
-
-local function setProperty(path, value)
-    local ref = ESP
-    for i = 1, #path-1 do
-        if ref and ref[path[i]] then
-            ref = ref[path[i]]
-        else
-            return
-        end
-    end
-    if ref and path[#path] then
-        ref[path[#path]] = value
-    end
-end
-
-VisualsEx:AddToggle("espEnabled", {
-    Text = "Enable ESP",
-    Default = false,
-    Callback = function(value)
-        if value and ESP and not ESP.Loaded and ESP.Load then
-            pcall(function() ESP:Load() end)
-        end
-        if ESP and ESP.Settings then
-            ESP.Settings.Enabled = value
-        end
-        applyQueuedToggles()
-    end
-})
-
-local TeamCheck = false
-local function IsEnemy(player)
-    if not TeamCheck then return true end
-    return player.Team ~= LocalPlayer.Team
-end
-
-VisualsEx:AddToggle("teamCheck", {
-    Text = "Team Check",
-    Default = ESP.Settings.TeamCheck or false,
-    Callback = function(value)
-        if ESP and ESP.Settings then
-            ESP.Settings.TeamCheck = value
-        end
-        if UpdateAllChams then
-            pcall(UpdateAllChams)
-        end
-    end
-})
-
-local espElements = {
-    {Name = "NameTag", Path = {"Properties", "ESP", "DisplayName"}, Type = "Toggle"},
-    {Name = "Box", Path = {"Properties", "Box", "Enabled"}, Type = "Toggle"},
-    {Name = "Box Color", Path = {"Properties", "Box", "Color"}, Type = "Color"},
-    {Name = "Tracer", Path = {"Properties", "Tracer", "Enabled"}, Type = "Toggle"},
-    {Name = "Tracer Color", Path = {"Properties", "Tracer", "Color"}, Type = "Color"},
-    {Name = "HeadDot", Path = {"Properties", "HeadDot", "Enabled"}, Type = "Toggle"},
-    {Name = "HeadDot Size", Path = {"Properties", "HeadDot", "NumSides"}, Type = "Slider", Min = 3, Max = 60, Default = ESP.Properties.HeadDot and ESP.Properties.HeadDot.NumSides or 6},
-    {Name = "HealthBar", Path = {"Properties", "HealthBar", "Enabled"}, Type = "Toggle"},
-}
-
-for _, element in ipairs(espElements) do
-    if element.Type == "Toggle" then
-        VisualsEx:AddToggle(element.Name, {
-            Text = element.Name,
-            Default = false,
-            Callback = function(val)
-                setToggle(element.Name, val)
-            end
-        })
-    elseif element.Type == "Color" then
-        local ref = ESP
-        for i = 1, #element.Path do
-            if ref then
-                ref = ref[element.Path[i]]
-            else
-                break
-            end
-        end
-        VisualsEx:AddLabel(element.Name):AddColorPicker(element.Name.."Color", {
-            Default = ref or Color3.new(1,1,1),
-            Callback = function(val)
-                setProperty(element.Path, val)
-            end
-        })
-    elseif element.Type == "Slider" then
-        VisualsEx:AddSlider(element.Name, {
-            Text = element.Name,
-            Min = element.Min,
-            Max = element.Max,
-            Default = element.Default or 6,
-            Rounding = 1,
-            Callback = function(val)
-                setProperty(element.Path, val)
-            end
-        })
-    end
-end
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-
-local SelfChamsEnabled = false
-local RainbowChamsEnabled = false
-local SelfChamsColor = Color3.fromRGB(255, 255, 255)
-local originalProperties = {}
-
-local function HSVToRGB(h, s, v)
-    local c = v * s
-    local x = c * (1 - math.abs((h / 60) % 2 - 1))
-    local m = v - c
-    local r, g, b = 0, 0, 0
-
-    if h < 60 then r, g, b = c, x, 0
-    elseif h < 120 then r, g, b = x, c, 0
-    elseif h < 180 then r, g, b = 0, c, x
-    elseif h < 240 then r, g, b = 0, x, c
-    elseif h < 300 then r, g, b = x, 0, c
-    else r, g, b = c, 0, x end
-
-    return Color3.new(r + m, g + m, b + m)
-end
-
-local function applyChams(char)
-    if not char then return end
-    originalProperties = {}
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-            originalProperties[part] = {
-                Color = part.Color,
-                Material = part.Material
-            }
-            part.Material = Enum.Material.ForceField
-            part.Color = SelfChamsColor
-        end
-    end
-end
-
-local function restoreChams()
-    for part, props in pairs(originalProperties) do
-        if part and part.Parent then
-            part.Color = props.Color
-            part.Material = props.Material
-        end
-    end
-    originalProperties = {}
-end
-
-local function updateChams()
-    if not SelfChamsEnabled then return end
-    for part, _ in pairs(originalProperties) do
-        if part and part.Parent then
-            if RainbowChamsEnabled then
-                local hue = (tick() * 120) % 360
-                part.Color = HSVToRGB(hue, 1, 1)
-            else
-                part.Color = SelfChamsColor
-            end
-        end
-    end
-end
-
-RunService.RenderStepped:Connect(updateChams)
-
-LocalPlayer.CharacterAdded:Connect(function(char)
-    if SelfChamsEnabled then
-        task.wait(1)
-        applyChams(char)
-    end
-end)
-
-VisualsEx:AddToggle("selfChamsEnabled", {
-    Text = "Self Chams",
-    Default = false,
-    Callback = function(val)
-        SelfChamsEnabled = val
-        if val then
-            if LocalPlayer.Character then
-                applyChams(LocalPlayer.Character)
-            end
-        else
-            restoreChams()
-        end
-    end
-})
-
-VisualsEx:AddToggle("rainbowChams", {
-    Text = "Rainbow Chams",
-    Default = false,
-    Callback = function(val)
-        RainbowChamsEnabled = val
-    end
-})
-
-VisualsEx:AddLabel("Self Chams Color"):AddColorPicker("selfChamsColor", {
-    Default = SelfChamsColor,
-    Callback = function(val)
-        SelfChamsColor = val
-    end
-})
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
-
-local ChamsEnabled = false
-local ChamsOccludedColor = {Color3.fromRGB(128, 0, 128), 0.7}
-local ChamsVisibleColor = {Color3.fromRGB(255, 0, 255), 0.3}
-
-local AdornmentsCache = {}
-local IgnoreNames = {["HumanoidRootPart"] = true}
-
-local function CreateAdornment(part, isHead, vis)
-    local adorn
-    if isHead then
-        adorn = Instance.new("CylinderHandleAdornment")
-        adorn.Height = vis == 1 and 0.87 or 1.02
-        adorn.Radius = vis == 1 and 0.5 or 0.65
-    else
-        adorn = Instance.new("BoxHandleAdornment")
-        local offset = vis == 1 and -0.05 or 0.05
-        adorn.Size = part.Size + Vector3.new(offset, offset, offset)
-    end
-    adorn.Adornee = part
-    adorn.Parent = part
-    adorn.ZIndex = vis == 1 and 2 or 1
-    adorn.AlwaysOnTop = vis == 1
-    adorn.Visible = false
-    return adorn
-end
-
-local function IsEnemy(player)
-    if ESP and ESP.Settings and ESP.Settings.TeamCheck then
-        return player.Team ~= LocalPlayer.Team
-    end
-    return true
-end
-
-local function ApplyChams(player)
-    if player ~= LocalPlayer and player.Character then
-        for _, part in pairs(player.Character:GetChildren()) do
-            if part:IsA("BasePart") and not IgnoreNames[part.Name] then
-                if not AdornmentsCache[part] then
-                    AdornmentsCache[part] = {
-                        CreateAdornment(part, part.Name=="Head", 1),
-                        CreateAdornment(part, part.Name=="Head", 2)
-                    }
-                end
-                local ad = AdornmentsCache[part]
-                local visible = ChamsEnabled and IsEnemy(player)
-
-                ad[1].Visible = visible
-                ad[1].Color3 = ChamsOccludedColor[1]
-                ad[1].Transparency = ChamsOccludedColor[2]
-
-                ad[2].Visible = visible
-                ad[2].AlwaysOnTop = true
-                ad[2].ZIndex = 9e9
-                ad[2].Color3 = ChamsVisibleColor[1]
-                ad[2].Transparency = ChamsVisibleColor[2]
-            end
-        end
-    end
-end
-
-local function UpdateAllChams()
-    for _, player in pairs(Players:GetPlayers()) do
-        ApplyChams(player)
-    end
-end
-
-local function TrackPlayer(player)
-    player:GetPropertyChangedSignal("Team"):Connect(function()
-        if AdornmentsCache[player] then
-            for _, ad in pairs(AdornmentsCache[player]) do
-                ad.Visible = ChamsEnabled and IsEnemy(player)
-            end
-        end
-    end)
-end
-
-Players.PlayerAdded:Connect(TrackPlayer)
-for _, plr in pairs(Players:GetPlayers()) do
-    if plr ~= LocalPlayer then
-        TrackPlayer(plr)
-    end
-end
-
-RunService.RenderStepped:Connect(UpdateAllChams)
-
-VisualsEx:AddToggle("chamsEnabled", {
-    Text = "Chams",
-    Default = ChamsEnabled,
-    Callback = function(val)
-        ChamsEnabled = val
-        for part, ad in pairs(AdornmentsCache) do
-            ad[1].Visible = val
-            ad[2].Visible = val
-        end
-    end
-})
-
-VisualsEx:AddLabel("Chams Occluded Color"):AddColorPicker("chamsOccludedColor", {
-    Default = ChamsOccludedColor[1],
-    Callback = function(val)
-        ChamsOccludedColor[1] = val
-    end
-})
-
-VisualsEx:AddLabel("Chams Visible Color"):AddColorPicker("chamsVisibleColor", {
-    Default = ChamsVisibleColor[1],
-    Callback = function(val)
-        ChamsVisibleColor[1] = val
-    end
-})
-
-VisualsEx:AddSlider("chamsOccludedTransparency", {
-    Text = "Occluded Transparency",
-    Default = ChamsOccludedColor[2],
-    Min = 0,
-    Max = 1,
-    Rounding = 2,
-    Callback = function(val)
-        ChamsOccludedColor[2] = val
-    end
-})
-
-VisualsEx:AddSlider("chamsVisibleTransparency", {
-    Text = "Visible Transparency",
-    Default = ChamsVisibleColor[2],
-    Min = 0,
-    Max = 1,
-    Rounding = 2,
-    Callback = function(val)
-        ChamsVisibleColor[2] = val
-    end
-})
 
 local worldbox = VisualsTab:AddRightGroupbox("World")
+
 local lighting = game:GetService("Lighting")
 local camera = game.Workspace.CurrentCamera
-local lockedTime, fovValue, nebulaEnabled = 12, 70, false
+ScriptState.lockedTime, ScriptState.fovValue, ScriptState.nebulaEnabled = 12, 70, false
 local originalAmbient, originalOutdoorAmbient = lighting.Ambient, lighting.OutdoorAmbient
 local originalFogStart, originalFogEnd, originalFogColor = lighting.FogStart, lighting.FogEnd, lighting.FogColor
+
 local nebulaThemeColor = Color3.fromRGB(173, 216, 230)
 
 worldbox:AddSlider("world_time", {
     Text = "Clock Time", Default = 12, Min = 0, Max = 24, Rounding = 1,
-    Callback = function(v) lockedTime = v lighting.ClockTime = v end,
+    Callback = function(v) ScriptState.lockedTime = v lighting.ClockTime = v end,
 })
 
 local oldNewIndex
 oldNewIndex = hookmetamethod(game, "__newindex", function(self, property, value)
     if not checkcaller() and self == lighting then
-        if property == "ClockTime" then value = lockedTime end
+        if property == "ClockTime" then value = ScriptState.lockedTime end
     end
     return oldNewIndex(self, property, value)
 end)
 
 worldbox:AddSlider("fov_slider", {
     Text = "FOV", Default = 70, Min = 30, Max = 120, Rounding = 2,
-    Callback = function(v) fovValue = v end,
+    Callback = function(v) ScriptState.fovValue = v end,
 })
-
-local fovEnabled = false
 
 worldbox:AddToggle("fov_toggle", {
     Text = "Enable FOV Change", Default = false,
-    Callback = function(state) fovEnabled = state end,
+    Callback = function(state) ScriptState.fovEnabled = state end,
 })
 
 game:GetService("RunService").RenderStepped:Connect(function() 
-    if fovEnabled then
-        camera.FieldOfView = fovValue 
+    if ScriptState.fovEnabled then
+        camera.FieldOfView = ScriptState.fovValue 
     end
 end)
+
 
 worldbox:AddToggle("nebula_theme", {
     Text = "Nebula Theme", Default = false,
     Callback = function(state)
-        nebulaEnabled = state
+        ScriptState.nebulaEnabled = state
         if state then
-            local b = Instance.new("BloomEffect", lighting) 
-            b.Intensity, b.Size, b.Threshold, b.Name = 0.7, 24, 1, "NebulaBloom"
-
-            local c = Instance.new("ColorCorrectionEffect", lighting) 
-            c.Saturation, c.Contrast, c.TintColor, c.Name = 0.5, 0.2, nebulaThemeColor, "NebulaColorCorrection"
-
-            local a = Instance.new("Atmosphere", lighting) 
-            a.Density, a.Offset, a.Glare, a.Haze, a.Color, a.Decay, a.Name = 0.4, 0.25, 1, 2, nebulaThemeColor, Color3.fromRGB(25, 25, 112), "NebulaAtmosphere"
-
+            local b = Instance.new("BloomEffect", lighting) b.Intensity, b.Size, b.Threshold, b.Name = 0.7, 24, 1, "NebulaBloom"
+            local c = Instance.new("ColorCorrectionEffect", lighting) c.Saturation, c.Contrast, c.TintColor, c.Name = 0.5, 0.2, nebulaThemeColor, "NebulaColorCorrection"
+            local a = Instance.new("Atmosphere", lighting) a.Density, a.Offset, a.Glare, a.Haze, a.Color, a.Decay, a.Name = 0.4, 0.25, 1, 2, nebulaThemeColor, Color3.fromRGB(25, 25, 112), "NebulaAtmosphere"
             lighting.Ambient, lighting.OutdoorAmbient = nebulaThemeColor, nebulaThemeColor
             lighting.FogStart, lighting.FogEnd = 100, 500
             lighting.FogColor = nebulaThemeColor
         else
             for _, v in pairs({"NebulaBloom", "NebulaColorCorrection", "NebulaAtmosphere"}) do
-                local obj = lighting:FindFirstChild(v) 
-                if obj then obj:Destroy() end
+                local obj = lighting:FindFirstChild(v) if obj then obj:Destroy() end
             end
             lighting.Ambient, lighting.OutdoorAmbient = originalAmbient, originalOutdoorAmbient
             lighting.FogStart, lighting.FogEnd = originalFogStart, originalFogEnd
             lighting.FogColor = originalFogColor
         end
     end,
-})
-
-worldbox:AddLabel("Nebula Color")
-    :AddColorPicker("nebula_color_picker", {
-        Default = Color3.fromRGB(173, 216, 230),
-        Callback = function(c)
-            nebulaThemeColor = c
-            if nebulaEnabled then
-                local nc = lighting:FindFirstChild("NebulaColorCorrection") 
-                if nc then nc.TintColor = c end
-
-                local na = lighting:FindFirstChild("NebulaAtmosphere") 
-                if na then na.Color = c end
-
-                lighting.Ambient, lighting.OutdoorAmbient = c, c
-                lighting.FogColor = c
-            end
+}):AddColorPicker("nebula_color_picker", {
+    Text = "Nebula Color", Default = Color3.fromRGB(173, 216, 230),
+    Callback = function(c)
+        nebulaThemeColor = c
+        if ScriptState.nebulaEnabled then
+            local nc = lighting:FindFirstChild("NebulaColorCorrection") if nc then nc.TintColor = c end
+            local na = lighting:FindFirstChild("NebulaAtmosphere") if na then na.Color = c end
+            lighting.Ambient, lighting.OutdoorAmbient = c, c
+            lighting.FogColor = c
         end
-    })
-
+    end,
+})
 
 
 local Lighting = game:GetService("Lighting")
@@ -1707,13 +1327,375 @@ local SkyboxDropdown = worldbox:AddDropdown("SkyboxSelector", {
     end
 end)
 
+local VisualsEx = VisualsTab:AddLeftGroupbox("ESP")
+
+if not _G.ExunysESPLoaded then
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/FakeAngles/PasteWare/refs/heads/main/ESP.lua"))()
+end
+
+local ESP = getgenv().ExunysDeveloperESP
+if not ESP then return end 
+
+ESP.Settings = ESP.Settings or {}
+ESP.Settings.Enabled = false
+ESP.Properties = ESP.Properties or {}
+
+local queuedToggles = {
+    NameTag = false,
+    Box = false,
+    Tracer = false,
+    HeadDot = false,
+    HealthBar = false,
+}
+
+local function applyQueuedToggles()
+    if not ESP.Settings.Enabled or not ESP.Properties then return end
+
+    if ESP.Properties.ESP then ESP.Properties.ESP.DisplayName = queuedToggles.NameTag end
+    if ESP.Properties.Box then ESP.Properties.Box.Enabled = queuedToggles.Box end
+    if ESP.Properties.Tracer then ESP.Properties.Tracer.Enabled = queuedToggles.Tracer end
+    if ESP.Properties.HeadDot then ESP.Properties.HeadDot.Enabled = queuedToggles.HeadDot end
+    if ESP.Properties.HealthBar then ESP.Properties.HealthBar.Enabled = queuedToggles.HealthBar end
+end
+
+local function setToggle(name, value)
+    queuedToggles[name] = value
+    applyQueuedToggles()
+end
+
+local function setProperty(path, value)
+    local ref = ESP
+    for i = 1, #path-1 do
+        if ref and ref[path[i]] then
+            ref = ref[path[i]]
+        else
+            return
+        end
+    end
+    if ref and path[#path] then
+        ref[path[#path]] = value
+    end
+end
+
+VisualsEx:AddToggle("espEnabled", {
+    Text = "Enable ESP",
+    Default = false,
+    Callback = function(value)
+        if value and ESP and not ESP.Loaded and ESP.Load then
+            pcall(function() ESP:Load() end)
+        end
+        if ESP and ESP.Settings then
+            ESP.Settings.Enabled = value
+        end
+        applyQueuedToggles()
+    end
+})
+
+local TeamCheck = false
+local function IsEnemy(player)
+    if not TeamCheck then return true end
+    return player.Team ~= LocalPlayer.Team
+end
+
+VisualsEx:AddToggle("teamCheck", {
+    Text = "Team Check",
+    Default = ESP.Settings.TeamCheck or false,
+    Callback = function(value)
+        if ESP and ESP.Settings then
+            ESP.Settings.TeamCheck = value
+        end
+        if UpdateAllChams then
+            pcall(UpdateAllChams)
+        end
+    end
+})
+
+local espElements = {
+    {Name = "NameTag", Path = {"Properties", "ESP", "DisplayName"}, Type = "Toggle"},
+    {Name = "Box", Path = {"Properties", "Box", "Enabled"}, Type = "Toggle"},
+    {Name = "Box Color", Path = {"Properties", "Box", "Color"}, Type = "Color"},
+    {Name = "Tracer", Path = {"Properties", "Tracer", "Enabled"}, Type = "Toggle"},
+    {Name = "Tracer Color", Path = {"Properties", "Tracer", "Color"}, Type = "Color"},
+    {Name = "HeadDot", Path = {"Properties", "HeadDot", "Enabled"}, Type = "Toggle"},
+    {Name = "HeadDot Size", Path = {"Properties", "HeadDot", "NumSides"}, Type = "Slider", Min = 3, Max = 60, Default = ESP.Properties.HeadDot and ESP.Properties.HeadDot.NumSides or 6},
+    {Name = "HealthBar", Path = {"Properties", "HealthBar", "Enabled"}, Type = "Toggle"},
+}
+
+for _, element in ipairs(espElements) do
+    if element.Type == "Toggle" then
+        VisualsEx:AddToggle(element.Name, {
+            Text = element.Name,
+            Default = false,
+            Callback = function(val)
+                setToggle(element.Name, val)
+            end
+        })
+    elseif element.Type == "Color" then
+        local ref = ESP
+        for i = 1, #element.Path do
+            if ref then
+                ref = ref[element.Path[i]]
+            else
+                break
+            end
+        end
+        VisualsEx:AddLabel(element.Name):AddColorPicker(element.Name.."Color", {
+            Default = ref or Color3.new(1,1,1),
+            Callback = function(val)
+                setProperty(element.Path, val)
+            end
+        })
+    elseif element.Type == "Slider" then
+        VisualsEx:AddSlider(element.Name, {
+            Text = element.Name,
+            Min = element.Min,
+            Max = element.Max,
+            Default = element.Default or 6,
+            Rounding = 1,
+            Callback = function(val)
+                setProperty(element.Path, val)
+            end
+        })
+    end
+end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local originalProperties = {}
+
+local function HSVToRGB(h, s, v)
+    local c = v * s
+    local x = c * (1 - math.abs((h / 60) % 2 - 1))
+    local m = v - c
+    local r, g, b = 0, 0, 0
+
+    if h < 60 then r, g, b = c, x, 0
+    elseif h < 120 then r, g, b = x, c, 0
+    elseif h < 180 then r, g, b = 0, c, x
+    elseif h < 240 then r, g, b = 0, x, c
+    elseif h < 300 then r, g, b = x, 0, c
+    else r, g, b = c, 0, x end
+
+    return Color3.new(r + m, g + m, b + m)
+end
+
+local function applyChams(char)
+    if not char then return end
+    originalProperties = {}
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            originalProperties[part] = {
+                Color = part.Color,
+                Material = part.Material
+            }
+            part.Material = Enum.Material.ForceField
+            part.Color = ScriptState.SelfChamsColor
+        end
+    end
+end
+
+local function restoreChams()
+    for part, props in pairs(originalProperties) do
+        if part and part.Parent then
+            part.Color = props.Color
+            part.Material = props.Material
+        end
+    end
+    originalProperties = {}
+end
+
+local function updateChams()
+    if not ScriptState.SelfChamsEnabled then return end
+    for part, _ in pairs(originalProperties) do
+        if part and part.Parent then
+            if ScriptState.RainbowChamsEnabled then
+                local hue = (tick() * 120) % 360
+                part.Color = HSVToRGB(hue, 1, 1)
+            else
+                part.Color = ScriptState.SelfChamsColor
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(updateChams)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    if ScriptState.SelfChamsEnabled then
+        task.wait(1)
+        applyChams(char)
+    end
+end)
+
+VisualsEx:AddToggle("ScriptState.selfChamsEnabled", {
+    Text = "Self Chams",
+    Default = false,
+    Callback = function(val)
+        ScriptState.SelfChamsEnabled = val
+        if val then
+            if LocalPlayer.Character then
+                applyChams(LocalPlayer.Character)
+            end
+        else
+            restoreChams()
+        end
+    end
+})
+
+VisualsEx:AddToggle("rainbowChams", {
+    Text = "Rainbow Chams",
+    Default = false,
+    Callback = function(val)
+        ScriptState.RainbowChamsEnabled = val
+    end
+})
+
+VisualsEx:AddLabel("Self Chams Color"):AddColorPicker("ScriptState.selfChamsColor", {
+    Default = ScriptState.SelfChamsColor,
+    Callback = function(val)
+        ScriptState.SelfChamsColor = val
+    end
+})
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+local ChamsOccludedColor = {Color3.fromRGB(128, 0, 128), 0.7}
+local ChamsVisibleColor = {Color3.fromRGB(255, 0, 255), 0.3}
+
+local AdornmentsCache = {}
+local IgnoreNames = {["HumanoidRootPart"] = true}
+
+local function CreateAdornment(part, isHead, vis)
+    local adorn
+    if isHead then
+        adorn = Instance.new("CylinderHandleAdornment")
+        adorn.Height = vis == 1 and 0.87 or 1.02
+        adorn.Radius = vis == 1 and 0.5 or 0.65
+    else
+        adorn = Instance.new("BoxHandleAdornment")
+        local offset = vis == 1 and -0.05 or 0.05
+        adorn.Size = part.Size + Vector3.new(offset, offset, offset)
+    end
+    adorn.Adornee = part
+    adorn.Parent = part
+    adorn.ZIndex = vis == 1 and 2 or 1
+    adorn.AlwaysOnTop = vis == 1
+    adorn.Visible = false
+    return adorn
+end
+
+local function IsEnemy(player)
+    if ESP and ESP.Settings and ESP.Settings.TeamCheck then
+        return player.Team ~= LocalPlayer.Team
+    end
+    return true
+end
+
+local function ApplyChams(player)
+    if player ~= LocalPlayer and player.Character then
+        for _, part in pairs(player.Character:GetChildren()) do
+            if part:IsA("BasePart") and not IgnoreNames[part.Name] then
+                if not AdornmentsCache[part] then
+                    AdornmentsCache[part] = {
+                        CreateAdornment(part, part.Name=="Head", 1),
+                        CreateAdornment(part, part.Name=="Head", 2)
+                    }
+                end
+                local ad = AdornmentsCache[part]
+                local visible = ScriptState.ChamsEnabled and IsEnemy(player)
+
+                ad[1].Visible = visible
+                ad[1].Color3 = ChamsOccludedColor[1]
+                ad[1].Transparency = ChamsOccludedColor[2]
+
+                ad[2].Visible = visible
+                ad[2].AlwaysOnTop = true
+                ad[2].ZIndex = 9e9
+                ad[2].Color3 = ChamsVisibleColor[1]
+                ad[2].Transparency = ChamsVisibleColor[2]
+            end
+        end
+    end
+end
+
+local function UpdateAllChams()
+    for _, player in pairs(Players:GetPlayers()) do
+        ApplyChams(player)
+    end
+end
+
+local function TrackPlayer(player)
+    player:GetPropertyChangedSignal("Team"):Connect(function()
+        if AdornmentsCache[player] then
+            for _, ad in pairs(AdornmentsCache[player]) do
+                ad.Visible = ScriptState.ChamsEnabled and IsEnemy(player)
+            end
+        end
+    end)
+end
+
+Players.PlayerAdded:Connect(TrackPlayer)
+for _, plr in pairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then
+        TrackPlayer(plr)
+    end
+end
+
+RunService.RenderStepped:Connect(UpdateAllChams)
+
+VisualsEx:AddToggle("ScriptState.chamsEnabled", {
+    Text = "Chams",
+    Default = ScriptState.ChamsEnabled,
+    Callback = function(val)
+        ScriptState.ChamsEnabled = val
+        for part, ad in pairs(AdornmentsCache) do
+            ad[1].Visible = val
+            ad[2].Visible = val
+        end
+    end
+})
+
+VisualsEx:AddLabel("Chams Occluded Color"):AddColorPicker("chamsOccludedColor", {
+    Default = ChamsOccludedColor[1],
+    Callback = function(val)
+        ChamsOccludedColor[1] = val
+    end
+})
+
+VisualsEx:AddLabel("Chams Visible Color"):AddColorPicker("chamsVisibleColor", {
+    Default = ChamsVisibleColor[1],
+    Callback = function(val)
+        ChamsVisibleColor[1] = val
+    end
+})
+
+VisualsEx:AddSlider("chamsOccludedTransparency", {
+    Text = "Occluded Transparency",
+    Default = ChamsOccludedColor[2],
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(val)
+        ChamsOccludedColor[2] = val
+    end
+})
+
+VisualsEx:AddSlider("chamsVisibleTransparency", {
+    Text = "Visible Transparency",
+    Default = ChamsVisibleColor[2],
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(val)
+        ChamsVisibleColor[2] = val
+    end
+})
+
 local localPlayer = game:GetService("Players").LocalPlayer
-local Cmultiplier = 1  
-local isSpeedActive = false
-local isFlyActive = false
-local isNoClipActive = false
-local isFunctionalityEnabled = true  
-local flySpeed = 1
 local camera = workspace.CurrentCamera
 local humanoid = nil
 
@@ -1722,7 +1704,7 @@ frabox:AddToggle("functionalityEnabled", {
     Default = true,
     Tooltip = "Enable or disable.",
     Callback = function(value)
-        isFunctionalityEnabled = value
+        ScriptState.isFunctionalityEnabled = value
     end
 })
 
@@ -1731,7 +1713,7 @@ frabox:AddToggle("speedEnabled", {
     Default = false,
     Tooltip = "It makes you go fast.",
     Callback = function(value)
-        isSpeedActive = value
+        ScriptState.isSpeedActive = value
     end
 }):AddKeyPicker("speedToggleKey", {
     Default = "C",  
@@ -1740,7 +1722,7 @@ frabox:AddToggle("speedEnabled", {
     Text = "Speed Toggle Key",
     Tooltip = "CFrame keybind.",
     Callback = function(value)
-        isSpeedActive = value
+        ScriptState.isSpeedActive = value
     end
 })
 
@@ -1752,7 +1734,7 @@ frabox:AddSlider("cframespeed", {
     Rounding = 1,
     Tooltip = "The CFrame speed.",
     Callback = function(value)
-        Cmultiplier = value
+        ScriptState.Cmultiplier = value
     end,
 })
 
@@ -1761,7 +1743,7 @@ frabox:AddToggle("flyEnabled", {
     Default = false,
     Tooltip = "Toggle CFrame Fly functionality.",
     Callback = function(value)
-        isFlyActive = value
+        ScriptState.isFlyActive = value
     end
 }):AddKeyPicker("flyToggleKey", {
     Default = "F",  
@@ -1770,11 +1752,11 @@ frabox:AddToggle("flyEnabled", {
     Text = "CFly Toggle Key",
     Tooltip = "CFrame Fly keybind.",
     Callback = function(value)
-        isFlyActive = value
+        ScriptState.isFlyActive = value
     end
 })
 
-frabox:AddSlider("flySpeed", {
+frabox:AddSlider("ScriptState.flySpeed", {
     Text = "CFly Speed",
     Default = 1,
     Min = 1,
@@ -1782,7 +1764,7 @@ frabox:AddSlider("flySpeed", {
     Rounding = 1,
     Tooltip = "The CFrame Fly speed.",
     Callback = function(value)
-        flySpeed = value
+        ScriptState.flySpeed = value
     end,
 })
 
@@ -1791,7 +1773,7 @@ frabox:AddToggle("noClipEnabled", {
     Default = false,
     Tooltip = "Enable or disable NoClip.",
     Callback = function(value)
-        isNoClipActive = value
+        ScriptState.isNoClipActive = value
     end
 }):AddKeyPicker("noClipToggleKey", {
     Default = "N",
@@ -1800,14 +1782,12 @@ frabox:AddToggle("noClipEnabled", {
     Text = "NoClip Toggle Key",
     Tooltip = "Keybind to toggle NoClip.",
     Callback = function(value)
-        isNoClipActive = value
+        ScriptState.isNoClipActive = value
     end
 })
 
-local masterToggle = false
-
 local function enableMasterToggle(value)
-    masterToggle = value
+    ScriptState.masterToggle = value
 end
 
 WarTycoonBox:AddToggle("Master Toggle", {
@@ -1893,6 +1873,7 @@ local function modifyWeaponSettings(property, value)
     end
 end
 
+
 --not final code need optimize FindFirstChild... Cuz can make FinFirstChilde true withous find 1 and find 2 only find 1
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -1900,16 +1881,11 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
-local isTankSpamEnabled = false
-local spamSpeed = 1
-local shellsToFire = 1
-local shellNumber = 1
-
 local FireTurret, RegisterTurretHit
 
 
 local function getTank()
-    if not masterToggle then return end
+    if not ScriptState.masterToggle then return end
     local tankWorkspace = Workspace:FindFirstChild("Game Systems") 
         and Workspace["Game Systems"]:FindFirstChild("Tank Workspace")
     if not tankWorkspace then return nil end
@@ -1933,7 +1909,7 @@ local function getTank()
 end
 
 local function getTurretSmokeAndSettings(tank)
-    if not masterToggle then return end
+    if not ScriptState.masterToggle then return end
     if not tank:FindFirstChild("Misc") or not tank.Misc:FindFirstChild("Turrets") then return nil, nil, nil end
     local turretsFolder = tank.Misc.Turrets
 
@@ -1956,7 +1932,7 @@ local function getTurretSmokeAndSettings(tank)
 end
 
 local function startTankSpam()
-    if not masterToggle then return end
+    if not ScriptState.masterToggle then return end
     if not FireTurret or not RegisterTurretHit then
         FireTurret = ReplicatedStorage.BulletFireSystem:WaitForChild("FireTurret")
         RegisterTurretHit = ReplicatedStorage.BulletFireSystem:WaitForChild("RegisterTurretHit")
@@ -1968,8 +1944,8 @@ local function startTankSpam()
     local turret, smoke, settings = getTurretSmokeAndSettings(tank)
     if not turret or not smoke or not settings then return end
 
-    for i = 1, shellsToFire do
-        if not isTankSpamEnabled then return end
+    for i = 1, ScriptState.shellsToFire do
+        if not ScriptState.isTankSpamEnabled then return end
 
         local targetHead = getClosestPlayer()
         if not targetHead then return end
@@ -2008,7 +1984,7 @@ local function startTankSpam()
             }
         )
 
-        shellNumber += 1
+        ScriptState.shellNumber += 1
     end
 end
 
@@ -2017,7 +1993,7 @@ WarTycoonBox:AddToggle("Tank Spam", {
     Default = false,
     Tooltip = "using silent aim fov",
     Callback = function(value)
-        isTankSpamEnabled = value
+        ScriptState.isTankSpamEnabled = value
     end,
 })
 :AddKeyPicker("Tank Spam Key", {
@@ -2027,7 +2003,7 @@ WarTycoonBox:AddToggle("Tank Spam", {
     Text = "Tank Spam Key",
     Tooltip = "Toggle Tank Spam",
     Callback = function()
-        if isTankSpamEnabled then
+        if ScriptState.isTankSpamEnabled then
             startTankSpam()
         end
     end,
@@ -2041,7 +2017,7 @@ WarTycoonBox:AddSlider("Shell Count", {
     Rounding = 0,
     Tooltip = "Adjust how many shells to fire at once.",
     Callback = function(value)
-        shellsToFire = math.floor(value)
+        ScriptState.shellsToFire = math.floor(value)
     end,
 })
 
@@ -2053,13 +2029,13 @@ WarTycoonBox:AddSlider("Spam Speed", {
     Rounding = 2,
     Tooltip = "Adjust the speed of Tank spam.",
     Callback = function(value)
-        spamSpeed = value
+        ScriptState.spamSpeed = value
     end,
 })
 
 RunService.Heartbeat:Connect(function()
-    if isTankSpamEnabled then
-        task.wait(math.max(0.01, 1 / spamSpeed))
+    if ScriptState.isTankSpamEnabled then
+        task.wait(math.max(0.01, 1 / ScriptState.spamSpeed))
         startTankSpam()
     end
 end)
@@ -2162,40 +2138,37 @@ ACSEngineBox:AddButton('CHANGE FIRE MODE', function()
     modifyWeaponSettings("Mode", inputField.Value or 'Auto')
 end)
 
-local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
-local strafeEnabled = false
-local strafeAllowed = true
-local strafeSpeed, strafeRadius = 50, 5
-local strafeMode, targetPlayer = "Horizontal", nil
-local originalCameraMode = nil
 
+local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
+ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
+ScriptState.strafeMode, ScriptState.targetPlayer = "Horizontal", nil
 local function startTargetStrafe()
-    if not strafeAllowed then return end
-    targetPlayer = getClosestPlayer()
-    if targetPlayer and targetPlayer.Parent then
-        originalCameraMode = game:GetService("Players").LocalPlayer.CameraMode
+    if not ScriptState.strafeAllowed then return end
+    ScriptState.targetPlayer = getClosestPlayer()
+    if ScriptState.targetPlayer and ScriptState.targetPlayer.Parent then
+        ScriptState.originalCameraMode = game:GetService("Players").LocalPlayer.CameraMode
         game:GetService("Players").LocalPlayer.CameraMode = Enum.CameraMode.Classic
-        local targetPos = targetPlayer.Position
+        local targetPos = ScriptState.targetPlayer.Position
         LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(targetPos))
-        Camera.CameraSubject = targetPlayer.Parent:FindFirstChild("Humanoid")
+        Camera.CameraSubject = ScriptState.targetPlayer.Parent:FindFirstChild("Humanoid")
     end
 end
 
 local function strafeAroundTarget()
-    if not (strafeAllowed and targetPlayer and targetPlayer.Parent) then return end
-    local targetPos = targetPlayer.Position
-    local angle = tick() * (strafeSpeed / 10)
-    local offset = strafeMode == "Horizontal"
-        and Vector3.new(math.cos(angle) * strafeRadius, 0, math.sin(angle) * strafeRadius)
-        or Vector3.new(math.cos(angle) * strafeRadius, strafeRadius, math.sin(angle) * strafeRadius)
+    if not (ScriptState.strafeAllowed and ScriptState.targetPlayer and ScriptState.targetPlayer.Parent) then return end
+    local targetPos = ScriptState.targetPlayer.Position
+    local angle = tick() * (ScriptState.strafeSpeed / 10)
+    local offset = ScriptState.strafeMode == "Horizontal"
+        and Vector3.new(math.cos(angle) * ScriptState.strafeRadius, 0, math.sin(angle) * ScriptState.strafeRadius)
+        or Vector3.new(math.cos(angle) * ScriptState.strafeRadius, ScriptState.strafeRadius, math.sin(angle) * ScriptState.strafeRadius)
     LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(targetPos + offset))
     LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position, targetPos)
 end
 
 local function stopTargetStrafe()
-    game:GetService("Players").LocalPlayer.CameraMode = originalCameraMode or Enum.CameraMode.Classic
+    game:GetService("Players").LocalPlayer.CameraMode = ScriptState.originalCameraMode or Enum.CameraMode.Classic
     Camera.CameraSubject = LocalPlayer.Character.Humanoid
-    strafeEnabled, targetPlayer = false, nil
+    ScriptState.strafeEnabled, ScriptState.targetPlayer = false, nil
 end
 
 
@@ -2204,8 +2177,8 @@ targetStrafe:AddToggle("strafeControlToggle", {
     Default = true,
     Tooltip = "Enable or disable the ability to use Target Strafe.",
     Callback = function(value)
-        strafeAllowed = value
-        if not strafeAllowed and strafeEnabled then
+        ScriptState.strafeAllowed = value
+        if not ScriptState.strafeAllowed and ScriptState.strafeEnabled then
             stopTargetStrafe()
         end
     end
@@ -2216,9 +2189,9 @@ targetStrafe:AddToggle("strafeToggle", {
     Default = false,
     Tooltip = "Enable or disable Target Strafe.",
     Callback = function(value)
-        if strafeAllowed then
-            strafeEnabled = value
-            if strafeEnabled then startTargetStrafe() else stopTargetStrafe() end
+        if ScriptState.strafeAllowed then
+            ScriptState.strafeEnabled = value
+            if ScriptState.strafeEnabled then startTargetStrafe() else stopTargetStrafe() end
         end
     end
 }):AddKeyPicker("strafeToggleKey", {
@@ -2228,9 +2201,9 @@ targetStrafe:AddToggle("strafeToggle", {
     Text = "Target Strafe Toggle Key",
     Tooltip = "Key to toggle Target Strafe",
     Callback = function(value)
-        if strafeAllowed then
-            strafeEnabled = value
-            if strafeEnabled then startTargetStrafe() else stopTargetStrafe() end
+        if ScriptState.strafeAllowed then
+            ScriptState.strafeEnabled = value
+            if ScriptState.strafeEnabled then startTargetStrafe() else stopTargetStrafe() end
         end
     end
 })
@@ -2241,7 +2214,7 @@ targetStrafe:AddDropdown("strafeModeDropdown", {
     Default = "Horizontal",
     Values = {"Horizontal", "UP"},
     Tooltip = "Select the strafing mode.",
-    Callback = function(value) strafeMode = value end
+    Callback = function(value) ScriptState.strafeMode = value end
 })
 
 targetStrafe:AddSlider("strafeRadiusSlider", {
@@ -2251,7 +2224,7 @@ targetStrafe:AddSlider("strafeRadiusSlider", {
     Max = 20,
     Rounding = 1,
     Tooltip = "Set the radius of movement around the target.",
-    Callback = function(value) strafeRadius = value end
+    Callback = function(value) ScriptState.strafeRadius = value end
 })
 
 targetStrafe:AddSlider("strafeSpeedSlider", {
@@ -2261,26 +2234,26 @@ targetStrafe:AddSlider("strafeSpeedSlider", {
     Max = 200,
     Rounding = 1,
     Tooltip = "Set the speed of strafing around the target.",
-    Callback = function(value) strafeSpeed = value end
+    Callback = function(value) ScriptState.strafeSpeed = value end
 })
 
 game:GetService("RunService").RenderStepped:Connect(function()
-    if strafeEnabled and strafeAllowed then strafeAroundTarget() end
+    if ScriptState.strafeEnabled and ScriptState.strafeAllowed then strafeAroundTarget() end
 end)
 
 while true do
     task.wait()
 
-    if isFunctionalityEnabled then
+    if ScriptState.isFunctionalityEnabled then
         if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
             humanoid = localPlayer.Character:FindFirstChild("Humanoid")
             
-            if isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
+            if ScriptState.isSpeedActive and humanoid and humanoid.MoveDirection.Magnitude > 0 then
                 local moveDirection = humanoid.MoveDirection.Unit
-                localPlayer.Character.HumanoidRootPart.CFrame = localPlayer.Character.HumanoidRootPart.CFrame + moveDirection * Cmultiplier
+                localPlayer.Character.HumanoidRootPart.CFrame = localPlayer.Character.HumanoidRootPart.CFrame + moveDirection * ScriptState.Cmultiplier
             end
 
-            if isFlyActive then
+            if ScriptState.isFlyActive then
                 local flyDirection = Vector3.zero
 
                 if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.W) then
@@ -2300,12 +2273,12 @@ while true do
                     flyDirection = flyDirection.Unit
                 end
 
-                local newPosition = localPlayer.Character.HumanoidRootPart.Position + flyDirection * flySpeed
+                local newPosition = localPlayer.Character.HumanoidRootPart.Position + flyDirection * ScriptState.flySpeed
                 localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(newPosition)
                 localPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
             end
 
-            if isNoClipActive then
+            if ScriptState.isNoClipActive then
                 for _, v in pairs(localPlayer.Character:GetDescendants()) do
                     if v:IsA("BasePart") and v.CanCollide then
                         v.CanCollide = false
