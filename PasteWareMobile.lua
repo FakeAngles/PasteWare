@@ -2064,6 +2064,92 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+local WarTycoonDead = ExploitTab:AddLeftGroupbox("Tank/Vehicle modifier")
+
+local selectedProperty = "FireRate"
+local propertyValue = 1
+local turretSettingsModule
+local nearestVehicle
+
+local propertyDropdown = WarTycoonDead:AddDropdown("PropertyDropdown", {
+    Values = {"FireRate","OverHeatCount","ColdownTime","DepleteDelay","OverheatIncrement","BulletSpeed"},
+    Default = selectedProperty,
+    Multi = false,
+    Text = "Select Property"
+})
+propertyDropdown:OnChanged(function(value)
+    selectedProperty = value
+end)
+
+local valueInput = WarTycoonDead:AddInput('ValueInput', {
+    Text='Value',
+    Default=tostring(propertyValue),
+    Tooltip='Enter value'
+})
+valueInput:OnChanged(function(value)
+    local num = tonumber(value)
+    if num then
+        propertyValue = num
+    end
+end)
+
+local function getNearestVehicle()
+    if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) then return nil end
+    local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
+    local vehicleWorkspaces = {
+        Workspace["Game Systems"]:FindFirstChild("Vehicle Workspace"),
+        Workspace["Game Systems"]:FindFirstChild("Tank Workspace")
+    }
+    local shortestDist, nearest = math.huge, nil
+    for _, ws in pairs(vehicleWorkspaces) do
+        if ws then
+            for _, v in pairs(ws:GetChildren()) do
+                if v:IsA("Model") then
+                    local posPart = v:FindFirstChildWhichIsA("BasePart")
+                    if posPart then
+                        local dist = (posPart.Position - playerPos).Magnitude
+                        if dist < shortestDist then
+                            shortestDist, nearest = dist, v
+                        end
+                    end
+                end
+            end
+        end
+    end
+    nearestVehicle = nearest
+    return nearest
+end
+
+local function findTurretSettings(vehicle)
+    if vehicle and vehicle:FindFirstChild("Misc") then
+        local turrets = vehicle.Misc:FindFirstChild("Turrets")
+        if turrets then
+            for _, wf in pairs(turrets:GetChildren()) do
+                for _, tf in pairs(wf:GetChildren()) do
+                    local settingsModule = tf:FindFirstChild("Settings")
+                    if settingsModule and settingsModule:IsA("ModuleScript") then
+                        turretSettingsModule = settingsModule
+                        return settingsModule
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function modifyWeaponSettings()
+    turretSettingsModule = turretSettingsModule or findTurretSettings(nearestVehicle or getNearestVehicle())
+    pcall(function()
+        local settingsTable = require(turretSettingsModule)
+        if settingsTable[selectedProperty] ~= nil then
+            settingsTable[selectedProperty] = propertyValue
+        end
+    end)
+end
+
+WarTycoonDead:AddButton('APPLY PROPERTY', modifyWeaponSettings)
+
 ACSEngineBox:AddToggle("WarTycoon", {
     Text = "War Tycoon",
     Default = false,
