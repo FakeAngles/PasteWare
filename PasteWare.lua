@@ -110,7 +110,11 @@ if not getgenv().ScriptState then
         strafeSpeed = 50,
         strafeRadius = 5,
         strafeMode = "Horizontal",
-        originalCameraMode = nil
+        originalCameraMode = nil,
+		vehiclePropertySelected = "FireRate",
+		vehiclePropertyValue = 8888,
+		nearestVehicle = nil,
+		turretSettingsModule = nil
     }
 end
 
@@ -2064,6 +2068,98 @@ ACSEngineBox:AddButton('CHANGE FIRE MODE', function()
     modifyWeaponSettings("Mode", inputField.Value or 'Auto')
 end)
 
+if not getgenv().ScriptState then
+    getgenv().ScriptState = {
+        vehiclePropertySelected = "FireRate",
+        vehiclePropertyValue = 8888,
+        nearestVehicle = nil,
+        turretSettingsModule = nil
+    }
+end
+
+local WarTycoonDead = ExploitTab:AddLeftGroupbox("Tank/Vehicle modifier")
+local properties = {"FireRate","OverHeatCount","ColdownTime","DepleteDelay","OverheatIncrement","BulletSpeed"}
+
+local propertyDropdown = WarTycoonDead:AddDropdown("PropertyDropdown", {
+    Values = properties,
+    Default = getgenv().ScriptState.vehiclePropertySelected,
+    Multi = false,
+    Text = "Select Property"
+})
+propertyDropdown:OnChanged(function(value)
+    getgenv().ScriptState.vehiclePropertySelected = value
+end)
+
+local valueInput = WarTycoonDead:AddInput('ValueInput', {
+    Text='Value',
+    Default=tostring(getgenv().ScriptState.vehiclePropertyValue),
+    Tooltip='Enter value'
+})
+valueInput:OnChanged(function(value)
+    local num = tonumber(value)
+    if num then
+        getgenv().ScriptState.vehiclePropertyValue = num
+    end
+end)
+
+function getNearestVehicle()
+    if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) then return nil end
+    local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
+    local vehicleWorkspaces = {
+        Workspace["Game Systems"]:FindFirstChild("Vehicle Workspace"),
+        Workspace["Game Systems"]:FindFirstChild("Tank Workspace")
+    }
+    local shortestDist = math.huge
+    local nearest = nil
+    for _, ws in pairs(vehicleWorkspaces) do
+        if ws then
+            for _, v in pairs(ws:GetChildren()) do
+                if v:IsA("Model") then
+                    local posPart = v:FindFirstChildWhichIsA("BasePart")
+                    if posPart then
+                        local dist = (posPart.Position - playerPos).Magnitude
+                        if dist < shortestDist then
+                            shortestDist = dist
+                            nearest = v
+                        end
+                    end
+                end
+            end
+        end
+    end
+    getgenv().ScriptState.nearestVehicle = nearest
+    return nearest
+end
+
+function findTurretSettings(vehicle)
+    if vehicle and vehicle:FindFirstChild("Misc") then
+        local turrets = vehicle.Misc:FindFirstChild("Turrets")
+        if turrets then
+            for _, wf in pairs(turrets:GetChildren()) do
+                for _, tf in pairs(wf:GetChildren()) do
+                    local settingsModule = tf:FindFirstChild("Settings")
+                    if settingsModule and settingsModule:IsA("ModuleScript") then
+                        getgenv().ScriptState.turretSettingsModule = settingsModule
+                        return settingsModule
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+function modifyWeaponSettings()
+    getgenv().ScriptState.turretSettingsModule = getgenv().ScriptState.turretSettingsModule or findTurretSettings(getgenv().ScriptState.nearestVehicle or getNearestVehicle())
+    pcall(function()
+        local settingsTable = require(getgenv().ScriptState.turretSettingsModule)
+        if settingsTable[getgenv().ScriptState.vehiclePropertySelected] ~= nil then
+            settingsTable[getgenv().ScriptState.vehiclePropertySelected] = getgenv().ScriptState.vehiclePropertyValue
+        end
+    end)
+end
+
+WarTycoonDead:AddButton('APPLY PROPERTY', modifyWeaponSettings)
 
 local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
 ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
