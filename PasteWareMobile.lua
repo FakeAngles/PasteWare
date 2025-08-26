@@ -376,10 +376,6 @@ UIStroke.Parent = OpenButton
 OpenButton.MouseButton1Click:Connect(function()
     Library:Toggle()
     if Library:IsOpen() then
-        OpenButton.Text = "CLOSE"
-    else
-        OpenButton.Text = "OPEN"
-    end
 end)
 
 local dragging, dragInput, dragStart, startPos
@@ -2403,3 +2399,4 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
