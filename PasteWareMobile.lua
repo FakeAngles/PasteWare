@@ -262,7 +262,7 @@ local function getClosestPlayer()
         if not HumanoidRootPart or not Humanoid or Humanoid and Humanoid.Health <= 0 then continue end
         local ScreenPosition, OnScreen = getPositionOnScreen(HumanoidRootPart.Position)
         if not OnScreen then continue end
-        local Distance = (getMousePosition() - ScreenPosition).Magnitude
+        local Distance = (center - ScreenPosition).Magnitude
         if Distance <= (DistanceToMouse or Options.Radius.Value or 2000) then
             Closest = ((Options.TargetPart.Value == "Random" and Character[ValidTargetParts[math.random(1, #ValidTargetParts)]]) or Character[Options.TargetPart.Value])
             DistanceToMouse = Distance
@@ -2290,4 +2290,5 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
 
