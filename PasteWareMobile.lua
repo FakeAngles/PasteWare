@@ -1,11 +1,3 @@
-if not game:IsLoaded() then 
-    game.Loaded:Wait()
-end
-
-if not syn or not protectgui then
-    getgenv().protectgui = function() end
-end
-
 if bypass_adonis then
     task.spawn(function()
         local g = getinfo or debug.getinfo
@@ -2399,4 +2391,5 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
 
