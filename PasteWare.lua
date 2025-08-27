@@ -514,7 +514,7 @@ velbox:AddToggle("desyncMasterEnabled", {
 })
 
 
-velbox:AddToggle("ScriptState.desyncEnabled", {
+velbox:AddToggle("desyncEnabled", {
     Text = "ScriptState.Desync keybind",
     Default = false,
     Tooltip = "Enable or disable reverse resolve ScriptState.desync.",
@@ -533,7 +533,7 @@ velbox:AddToggle("ScriptState.desyncEnabled", {
 })
 
 
-velbox:AddSlider("ScriptState.ReverseResolveIntensity", {
+velbox:AddSlider("ReverseResolveIntensity", {
     Text = "velocity intensity",
     Default = 5,
     Min = 1,
@@ -590,7 +590,7 @@ aimbox:AddToggle("antiLock_Enabled", {
     end,
 })
 
-aimbox:AddSlider("ScriptState.ResolverIntensity", {
+aimbox:AddSlider("ResolverIntensity", {
     Text = "Resolver Intensity",
     Default = 1.0,
     Min = 0,
@@ -2340,3 +2340,4 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
