@@ -1,3 +1,11 @@
+if not game:IsLoaded() then 
+    game.Loaded:Wait()
+end
+
+if not syn or not protectgui then
+    getgenv().protectgui = function() end
+end
+
 if bypass_adonis then
     task.spawn(function()
         local g = getinfo or debug.getinfo
@@ -368,6 +376,10 @@ UIStroke.Parent = OpenButton
 OpenButton.MouseButton1Click:Connect(function()
     Library:Toggle()
     if Library:IsOpen() then
+        OpenButton.Text = "CLOSE"
+    else
+        OpenButton.Text = "OPEN"
+    end
 end)
 
 local dragging, dragInput, dragStart, startPos
@@ -1805,6 +1817,92 @@ WarTycoonBox:AddToggle("Master Toggle", {
     Callback = enableMasterToggle
 })
 
+local hookEnabled = false
+local oldNamecall
+
+local function enableBulletHitManipulation(value)
+    if not masterToggle then return end
+    BManipulation = value
+    local remote = game:GetService("ReplicatedStorage").BulletFireSystem.BulletHit
+
+    if BManipulation then
+        if not hookEnabled then
+            hookEnabled = true
+            oldNamecall = hookmetamethod(remote, "__namecall", newcclosure(function(self, ...)
+                if typeof(self) == "Instance" then
+                    local method = getnamecallmethod()
+                    if method and (method == "FireServer" and self == remote) then
+                        local HitPart = getClosestPlayer()
+                        if HitPart then
+                            local remArgs = {...}
+                            remArgs[2] = HitPart
+                            remArgs[3] = HitPart.Position
+                            setnamecallmethod(method)
+                            return oldNamecall(self, unpack(remArgs))
+                        else
+                            setnamecallmethod(method)
+                        end
+                    end
+                end
+                return oldNamecall(self, ...)
+            end))
+        end
+    else
+        BsManipulation = false
+        if hookEnabled then
+            hookEnabled = false
+            if oldNamecall then
+                hookmetamethod(remote, "__namecall", oldNamecall)
+            end
+        end
+    end
+end
+
+WarTycoonBox:AddToggle("BulletHit manipulation", {
+    Text = "Magic Bullet [beta]",
+    Default = false,
+    Tooltip = "Magic Bullet?",
+    Callback = function(value)
+        enableBulletHitManipulation(value)
+    end
+})
+
+local hookEnabled = false
+local oldNamecall
+
+local function enableRocketHitManipulation(value)
+    if not masterToggle then return end
+    RManipulation = value
+    local remote = game:GetService("ReplicatedStorage").RocketSystem.Events.RocketHit
+
+    if RManipulation and not hookEnabled then
+        hookEnabled = true
+        oldNamecall = hookmetamethod(remote, "__namecall", newcclosure(function(self, ...)
+            if typeof(self) == "Instance" and getnamecallmethod() == "FireServer" and self == remote then
+                local remArgs = {...}
+                local targetPart = getClosestPlayer()
+                if targetPart then
+                    remArgs[1] = targetPart.Position
+                    remArgs[2] = (targetPart.Position - game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.Position).unit
+                    remArgs[5] = targetPart
+                    setnamecallmethod("FireServer")
+                    return oldNamecall(self, unpack(remArgs))
+                end
+            end
+            return oldNamecall(self, ...)
+        end))
+    elseif not RManipulation and hookEnabled then
+        hookEnabled = false
+        if oldNamecall then hookmetamethod(remote, "__namecall", oldNamecall) end
+    end
+end
+
+WarTycoonBox:AddToggle("RocketHit manipulation", {
+    Text = "Magic Rocket",
+    Default = false,
+    Tooltip = "Enables Magic Rocket manipulation",
+    Callback = enableRocketHitManipulation
+})
 
 local function modifyWeaponSettings(property, value)
     local function findSettingsModule(parent)
@@ -2052,91 +2150,121 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-local WarTycoonDead = ExploitTab:AddLeftGroupbox("Tank/Vehicle modifier")
+local isQuickLagRPGExecuting = false
 
-local selectedProperty = "FireRate"
-local propertyValue = 1
-local turretSettingsModule
-local nearestVehicle
+local function startQuickLagRPG()
+    if not masterToggle then return end
+    local camera, playerName = workspace.Camera, game:GetService("Players").LocalPlayer.Name
+    local repeatCount = 500
 
-local propertyDropdown = WarTycoonDead:AddDropdown("PropertyDropdown", {
-    Values = {"FireRate","OverHeatCount","ColdownTime","DepleteDelay","OverheatIncrement","BulletSpeed"},
-    Default = selectedProperty,
-    Multi = false,
-    Text = "Select Property"
-})
-propertyDropdown:OnChanged(function(value)
-    selectedProperty = value
-end)
+    local validWeapons = {"RPG", "Javelin", "Stinger"}
 
-local valueInput = WarTycoonDead:AddInput('ValueInput', {
-    Text='Value',
-    Default=tostring(propertyValue),
-    Tooltip='Enter value'
-})
-valueInput:OnChanged(function(value)
-    local num = tonumber(value)
-    if num then
-        propertyValue = num
+    local function getActiveWeapon()
+        for _, weaponName in ipairs(validWeapons) do
+            local weapon = workspace[playerName]:FindFirstChild(weaponName)
+            if weapon and weapon:IsA("Tool") and weapon.Parent == workspace[playerName] then
+                return weaponName
+            end
+        end
+        return nil
     end
-end)
 
-local function getNearestVehicle()
-    if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) then return nil end
-    local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
-    local vehicleWorkspaces = {
-        Workspace["Game Systems"]:FindFirstChild("Vehicle Workspace"),
-        Workspace["Game Systems"]:FindFirstChild("Tank Workspace")
-    }
-    local shortestDist, nearest = math.huge, nil
-    for _, ws in pairs(vehicleWorkspaces) do
-        if ws then
-            for _, v in pairs(ws:GetChildren()) do
-                if v:IsA("Model") then
-                    local posPart = v:FindFirstChildWhichIsA("BasePart")
-                    if posPart then
-                        local dist = (posPart.Position - playerPos).Magnitude
-                        if dist < shortestDist then
-                            shortestDist, nearest = dist, v
-                        end
-                    end
-                end
+    local function fireQuickLagRocket(weaponName)
+        if not weaponName then return end
+
+        local fireRocketVector = camera.CFrame.LookVector
+        local fireRocketPosition = camera.CFrame.Position
+        game:GetService("ReplicatedStorage").RocketSystem.Events.FireRocket:InvokeServer(
+            fireRocketVector, workspace[playerName][weaponName], workspace[playerName][weaponName], fireRocketPosition
+        )
+
+        local fireRocketClientTable = {
+            ["expShake"] = {["fadeInTime"] = 0.05, ["magnitude"] = 3, ["rotInfluence"] = {0.4, 0, 0.4}, ["fadeOutTime"] = 0.5, ["posInfluence"] = {1, 1, 0}, ["roughness"] = 3},
+            ["gravity"] = Vector3.new(0, -20, 0), ["HelicopterDamage"] = 450, ["FireRate"] = 15, ["VehicleDamage"] = 350, ["ExpName"] = "Rocket",
+            ["RocketAmount"] = 1, ["ExpRadius"] = 12, ["BoatDamage"] = 300, ["TankDamage"] = 300, ["Acceleration"] = 8, ["ShieldDamage"] = 11170,
+            ["Distance"] = 4000, ["PlaneDamage"] = 500, ["GunshipDamage"] = 170, ["velocity"] = 200, ["ExplosionDamage"] = 120
+        }
+
+        local fireRocketClientInstance1 = game:GetService("ReplicatedStorage").RocketSystem.Rockets["RPG Rocket"]
+        local fireRocketClientInstance2 = workspace[playerName][weaponName]
+        local fireRocketClientInstance3 = workspace[playerName][weaponName]
+        game:GetService("ReplicatedStorage").RocketSystem.Events.FireRocketClient:Fire(
+            camera.CFrame.Position, camera.CFrame.LookVector, fireRocketClientTable, fireRocketClientInstance1, fireRocketClientInstance2, fireRocketClientInstance3,
+            game:GetService("Players").LocalPlayer, nil, { [1] = workspace[playerName]:FindFirstChild(weaponName) }
+        )
+    end
+
+    local activeWeapon = getActiveWeapon()
+    if activeWeapon then
+        for i = 1, repeatCount do
+            task.spawn(fireQuickLagRocket, activeWeapon)
+        end
+    else
+        warn("No active weapon: RPG | JAVELIN | STINGER")
+    end
+end
+
+WarTycoonBox:AddToggle("Quick Lag RPG", {
+    Text = "Quick Lag rocket",
+    Default = false,
+    Tooltip = "Enable or disable Quick Lag rocket.",
+    Callback = function(value)
+        if value then
+            if not isQuickLagRPGExecuting then
+                isQuickLagRPGExecuting = true
+                startQuickLagRPG()
+            end
+        else
+            isQuickLagRPGExecuting = false
+        end
+    end,
+}):AddKeyPicker("Quick Lag rocket Key", {
+    Default = "I",
+    Mode = "Toggle",
+    Text = "Quick Lag rocket Key",
+    Tooltip = "Key to toggle Quick Lag rocket",
+    Callback = function()
+        if not isQuickLagRPGExecuting then
+            isQuickLagRPGExecuting = true
+            startQuickLagRPG()
+        else
+            isQuickLagRPGExecuting = false
+        end
+    end,
+})
+
+local antiLagConnection
+
+WarTycoonBox:AddToggle("AntiLag", {
+    Text = "Anti-Lag",
+    Default = false,
+    Tooltip = "Removing all VisualRockets",
+    Callback = function(value)
+        if not enableMasterToggle then
+            if antiLagConnection then
+                antiLagConnection:Disconnect()
+                antiLagConnection = nil
+            end
+            return
+        end
+
+        if value then
+            local visualRocketsFolder = workspace:WaitForChild("VisualRockets")
+            for _, object in ipairs(visualRocketsFolder:GetChildren()) do
+                object:Destroy()
+            end
+            antiLagConnection = visualRocketsFolder.ChildAdded:Connect(function(newObject)
+                newObject:Destroy()
+            end)
+
+        else
+            if antiLagConnection then
+                antiLagConnection:Disconnect()
+                antiLagConnection = nil
             end
         end
     end
-    nearestVehicle = nearest
-    return nearest
-end
-
-local function findTurretSettings(vehicle)
-    if vehicle and vehicle:FindFirstChild("Misc") then
-        local turrets = vehicle.Misc:FindFirstChild("Turrets")
-        if turrets then
-            for _, wf in pairs(turrets:GetChildren()) do
-                for _, tf in pairs(wf:GetChildren()) do
-                    local settingsModule = tf:FindFirstChild("Settings")
-                    if settingsModule and settingsModule:IsA("ModuleScript") then
-                        turretSettingsModule = settingsModule
-                        return settingsModule
-                    end
-                end
-            end
-        end
-    end
-    return nil
-end
-
-local function modifyWeaponSettings()
-    turretSettingsModule = turretSettingsModule or findTurretSettings(nearestVehicle or getNearestVehicle())
-    pcall(function()
-        local settingsTable = require(turretSettingsModule)
-        if settingsTable[selectedProperty] ~= nil then
-            settingsTable[selectedProperty] = propertyValue
-        end
-    end)
-end
-
-WarTycoonDead:AddButton('APPLY PROPERTY', modifyWeaponSettings)
+})
 
 ACSEngineBox:AddToggle("WarTycoon", {
     Text = "War Tycoon",
@@ -2391,5 +2519,3 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
-
-
