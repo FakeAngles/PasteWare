@@ -369,17 +369,12 @@ OpenButton.Active = true
 
 local UIStroke = Instance.new("UIStroke")
 UIStroke.Thickness = 1.5
-UIStroke.Color = Color3.fromRGB(0, 110, 255)
+UIStroke.Color = Color3.fromRGB(0, -110, 255)
 UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 UIStroke.Parent = OpenButton
 
 OpenButton.MouseButton1Click:Connect(function()
     Library:Toggle()
-    if Library:IsOpen() then
-        OpenButton.Text = "CLOSE"
-    else
-        OpenButton.Text = "OPEN"
-    end
 end)
 
 local dragging, dragInput, dragStart, startPos
@@ -410,12 +405,6 @@ end)
 OpenButton.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
         dragInput = input
-    end
-end)
-
-game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        update(input)
     end
 end)
 
@@ -708,8 +697,7 @@ Main:AddDropdown("Method", {
         "ScreenPointToRay",
         "Raycast",
         "FindPartOnRay",
-        "FindPartOnRayWithIgnoreList",
-        "FindPartOnRayWithWhitelist"
+        "FindPartOnRayWithIgnoreList"
     }
 }):OnChanged(function() 
     SilentAimSettings.SilentAimMethod = Options.Method.Value 
@@ -783,47 +771,30 @@ end)
 
 local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
     local Main = FieldOfViewBOX:AddTab("Visuals")
-    local Camera = workspace.CurrentCamera
 
     Main:AddToggle("Visible", {Text = "Show FOV Circle"})
-        :OnChanged(function(val)
-            fov_circle.Visible = val
-            SilentAimSettings.FOVVisible = val
+        :AddColorPicker("Color", {Default = Color3.fromRGB(54, 57, 241)})
+        :OnChanged(function()
+            fov_circle.Visible = Toggles.Visible.Value
+            SilentAimSettings.FOVVisible = Toggles.Visible.Value
         end)
-
-    Main:AddLabel("FOV Circle Color")
-        :AddColorPicker("FOVColor", {
-            Default = Color3.fromRGB(54, 57, 241),
-            Callback = function(val)
-                fov_circle.Color = val
-                SilentAimSettings.FOVColor = val
-            end
-        })
 
     Main:AddSlider("Radius", {
-        Text = "FOV Circle Radius",
-        Min = 0,
-        Max = 360,
-        Default = 130,
-        Rounding = 0,
-        Callback = function(val)
-            fov_circle.Radius = val
-            SilentAimSettings.FOVRadius = val
-        end
-    })
+        Text = "FOV Circle Radius", 
+        Min = 0, 
+        Max = 360, 
+        Default = 130, 
+        Rounding = 0
+    }):OnChanged(function()
+        fov_circle.Radius = Options.Radius.Value
+        SilentAimSettings.FOVRadius = Options.Radius.Value
+    end)
 
     Main:AddToggle("MousePosition", {Text = "Show Silent Aim Target"})
-        :OnChanged(function(val)
-            SilentAimSettings.ShowSilentAimTarget = val
+        :AddColorPicker("MouseVisualizeColor", {Default = Color3.fromRGB(54, 57, 241)})
+        :OnChanged(function()
+            SilentAimSettings.ShowSilentAimTarget = Toggles.MousePosition.Value
         end)
-
-    Main:AddLabel("Mouse Target Color")
-        :AddColorPicker("MouseVisualizeColor", {
-            Default = Color3.fromRGB(54, 57, 241),
-            Callback = function(val)
-                SilentAimSettings.MouseColor = val
-            end
-        })
 
     Main:AddDropdown("PlayerDropdown", {
         SpecialType = "Player",
@@ -832,12 +803,6 @@ local FieldOfViewBOX = GeneralTab:AddLeftTabbox("Field Of View") do
         Multi = true
     })
 end
-
-game:GetService("RunService").RenderStepped:Connect(function()
-    if fov_circle.Visible then
-        fov_circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    end
-end)
 
 local previousHighlight = nil
 local function removeOldHighlight()
@@ -981,81 +946,85 @@ for _, plr in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(trackPlayer)
 
-local RunService = game:GetService("RunService")
-local Camera = workspace.CurrentCamera
-
-local ClosestHitPart = nil
-RunService.Heartbeat:Connect(function()
-    if Toggles.aim_Enabled and Toggles.aim_Enabled.Value then
-        ClosestHitPart = getClosestPlayer()
-    else
-        ClosestHitPart = nil
-    end
-end)
-
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
-    local self, args = ..., {...}
-    local method = getnamecallmethod()
-    local chance = CalculateChance(SilentAimSettings.HitChance)
+    local Method, Arguments = getnamecallmethod(), {...}
+    local self, chance = Arguments[1], CalculateChance(SilentAimSettings.HitChance)
 
     local BlockedMethods = SilentAimSettings.BlockedMethods or {}
-    if method == "Destroy" and self == Client then return end
-    if table.find(BlockedMethods, method) then return end
-    if SilentAimSettings.CheckForFireFunc and 
-       (method:find("Ray") or method:find("ViewportPoint") or method:find("ScreenPoint")) then
-        local n = tostring(self):lower()
-        if not (n:find("bullet") or n:find("gun") or n:find("fire")) then
+    if Method == "Destroy" and self == Client then
+        return
+    end
+    if table.find(BlockedMethods, Method) then
+        return
+    end
+
+    local CanContinue = false
+    if SilentAimSettings.CheckForFireFunc and (Method == "FindPartOnRay" or Method == "FindPartOnRayWithWhitelist" or Method == "FindPartOnRayWithIgnoreList" or Method == "Raycast" or Method == "ViewportPointToRay" or Method == "ScreenPointToRay") then
+        local Traceback = tostring(debug.traceback()):lower()
+        if Traceback:find("bullet") or Traceback:find("gun") or Traceback:find("fire") then
+            CanContinue = true
+        else
             return oldNamecall(...)
         end
     end
 
-    local HitPart = nil
-    if Toggles.aim_Enabled and Toggles.aim_Enabled.Value and not checkcaller() and chance then
-        HitPart = ClosestHitPart
+    if Toggles.aim_Enabled and Toggles.aim_Enabled.Value and self == workspace and not checkcaller() and chance then
+        local HitPart = getClosestPlayer()
+        if HitPart then
+            local function modifyRay(Origin)
+                if SilentAimSettings.BulletTP then
+                    Origin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
+                end
+                return Origin, getDirection(Origin, HitPart.Position)
+            end
+
+            if Method == "FindPartOnRayWithIgnoreList" and Options.Method.Value == Method then
+                if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
+                    local Origin, Direction = modifyRay(Arguments[2].Origin)
+                    Arguments[2] = Ray.new(Origin, Direction * SilentAimSettings.MultiplyUnitBy)
+                    return oldNamecall(unpack(Arguments))
+                end
+            elseif Method == "FindPartOnRayWithWhitelist" and Options.Method.Value == Method then
+                if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
+                    local Origin, Direction = modifyRay(Arguments[2].Origin)
+                    Arguments[2] = Ray.new(Origin, Direction * SilentAimSettings.MultiplyUnitBy)
+                    return oldNamecall(unpack(Arguments))
+                end
+            elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and Options.Method.Value:lower() == Method:lower() then
+                if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
+                    local Origin, Direction = modifyRay(Arguments[2].Origin)
+                    Arguments[2] = Ray.new(Origin, Direction * SilentAimSettings.MultiplyUnitBy)
+                    return oldNamecall(unpack(Arguments))
+                end
+            elseif Method == "Raycast" and Options.Method.Value == Method then
+                if ValidateArguments(Arguments, ExpectedArguments.Raycast) then
+                    local Origin, Direction = modifyRay(Arguments[2])
+                    Arguments[2], Arguments[3] = Origin, Direction * SilentAimSettings.MultiplyUnitBy
+                    return oldNamecall(unpack(Arguments))
+                end
+            elseif Method == "ViewportPointToRay" and Options.Method.Value == Method then
+                if ValidateArguments(Arguments, ExpectedArguments.ViewportPointToRay) then
+                    local Origin = Camera.CFrame.p
+                    if SilentAimSettings.BulletTP then
+                        Origin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
+                    end
+                    Arguments[2] = Camera:WorldToScreenPoint(HitPart.Position)
+                    return Ray.new(Origin, (HitPart.Position - Origin).Unit * SilentAimSettings.MultiplyUnitBy)
+                end
+            elseif Method == "ScreenPointToRay" and Options.Method.Value == Method then
+                if ValidateArguments(Arguments, ExpectedArguments.ScreenPointToRay) then
+                    local Origin = Camera.CFrame.p
+                    if SilentAimSettings.BulletTP then
+                        Origin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
+                    end
+                    Arguments[2] = Camera:WorldToScreenPoint(HitPart.Position)
+                    return Ray.new(Origin, (HitPart.Position - Origin).Unit * SilentAimSettings.MultiplyUnitBy)
+                end
+            end
+        end
     end
 
-    if HitPart and self == workspace then
-        local function modifyRay(origin)
-            if SilentAimSettings.BulletTP then
-                origin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
-            end
-            return origin, getDirection(origin, HitPart.Position)
-        end
-
-        if (method == "FindPartOnRayWithIgnoreList" or
-            method == "FindPartOnRayWithWhitelist" or
-            method:lower() == "findpartonray" or
-            method == "Raycast") and Options.Method.Value == method then
-
-            local oldRay = args[2]
-            local Origin, Direction
-
-            if method == "Raycast" then
-                Origin, Direction = modifyRay(args[2])
-                args[2], args[3] = Origin, Direction
-            else
-                Origin, Direction = modifyRay(oldRay.Origin)
-                args[2] = Ray.new(Origin, Direction)
-            end
-
-            return oldNamecall(unpack(args))
-        elseif method == "ViewportPointToRay" and Options.Method.Value == method then
-            local Origin = Camera.CFrame.p
-            if SilentAimSettings.BulletTP then
-                Origin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
-            end
-            args[2] = Camera:WorldToScreenPoint(HitPart.Position)
-            return Ray.new(Origin, (HitPart.Position - Origin).Unit)
-        elseif method == "ScreenPointToRay" and Options.Method.Value == method then
-            local Origin = Camera.CFrame.p
-            if SilentAimSettings.BulletTP then
-                Origin = (HitPart.CFrame * CFrame.new(0, 0, 1)).p
-            end
-            args[2] = Camera:WorldToScreenPoint(HitPart.Position)
-            return Ray.new(Origin, (HitPart.Position - Origin).Unit)
-        end
-    end
     return oldNamecall(...)
 end))
 
@@ -1113,32 +1082,29 @@ VisualsEx:AddToggle("espEnabled", {
     Text = "Enable ESP",
     Default = false,
     Callback = function(value)
-        if value and ESP and not ESP.Loaded and ESP.Load then
-            pcall(function() ESP:Load() end)
+        if value and not ESP.Loaded then
+            ESP:Load()
         end
-        if ESP and ESP.Settings then
-            ESP.Settings.Enabled = value
-        end
+        ESP.Settings.Enabled = value
         applyQueuedToggles()
     end
 })
 
 local TeamCheck = false
+
 local function IsEnemy(player)
-    if not TeamCheck then return true end
+    if not TeamCheck then
+        return true
+    end
     return player.Team ~= LocalPlayer.Team
 end
 
 VisualsEx:AddToggle("teamCheck", {
     Text = "Team Check",
-    Default = ESP.Settings.TeamCheck or false,
+    Default = ESP.Settings.TeamCheck,
     Callback = function(value)
-        if ESP and ESP.Settings then
-            ESP.Settings.TeamCheck = value
-        end
-        if UpdateAllChams then
-            pcall(UpdateAllChams)
-        end
+        ESP.Settings.TeamCheck = value
+        UpdateAllChams()
     end
 })
 
@@ -1149,7 +1115,7 @@ local espElements = {
     {Name = "Tracer", Path = {"Properties", "Tracer", "Enabled"}, Type = "Toggle"},
     {Name = "Tracer Color", Path = {"Properties", "Tracer", "Color"}, Type = "Color"},
     {Name = "HeadDot", Path = {"Properties", "HeadDot", "Enabled"}, Type = "Toggle"},
-    {Name = "HeadDot Size", Path = {"Properties", "HeadDot", "NumSides"}, Type = "Slider", Min = 3, Max = 60, Default = ESP.Properties.HeadDot and ESP.Properties.HeadDot.NumSides or 6},
+    {Name = "HeadDot Size", Path = {"Properties", "HeadDot", "NumSides"}, Type = "Slider", Min = 3, Max = 60, Default = ESP.Properties.HeadDot.NumSides},
     {Name = "HealthBar", Path = {"Properties", "HealthBar", "Enabled"}, Type = "Toggle"},
 }
 
@@ -1163,16 +1129,8 @@ for _, element in ipairs(espElements) do
             end
         })
     elseif element.Type == "Color" then
-        local ref = ESP
-        for i = 1, #element.Path do
-            if ref then
-                ref = ref[element.Path[i]]
-            else
-                break
-            end
-        end
         VisualsEx:AddLabel(element.Name):AddColorPicker(element.Name.."Color", {
-            Default = ref or Color3.new(1,1,1),
+            Default = setProperty and ESP[element.Path[1]][element.Path[2]][element.Path[3]] or Color3.new(1,1,1),
             Callback = function(val)
                 setProperty(element.Path, val)
             end
@@ -1182,7 +1140,7 @@ for _, element in ipairs(espElements) do
             Text = element.Name,
             Min = element.Min,
             Max = element.Max,
-            Default = element.Default or 6,
+            Default = element.Default,
             Rounding = 1,
             Callback = function(val)
                 setProperty(element.Path, val)
@@ -1475,48 +1433,33 @@ worldbox:AddToggle("nebula_theme", {
     Callback = function(state)
         nebulaEnabled = state
         if state then
-            local b = Instance.new("BloomEffect", lighting) 
-            b.Intensity, b.Size, b.Threshold, b.Name = 0.7, 24, 1, "NebulaBloom"
-
-            local c = Instance.new("ColorCorrectionEffect", lighting) 
-            c.Saturation, c.Contrast, c.TintColor, c.Name = 0.5, 0.2, nebulaThemeColor, "NebulaColorCorrection"
-
-            local a = Instance.new("Atmosphere", lighting) 
-            a.Density, a.Offset, a.Glare, a.Haze, a.Color, a.Decay, a.Name = 0.4, 0.25, 1, 2, nebulaThemeColor, Color3.fromRGB(25, 25, 112), "NebulaAtmosphere"
-
+            local b = Instance.new("BloomEffect", lighting) b.Intensity, b.Size, b.Threshold, b.Name = 0.7, 24, 1, "NebulaBloom"
+            local c = Instance.new("ColorCorrectionEffect", lighting) c.Saturation, c.Contrast, c.TintColor, c.Name = 0.5, 0.2, nebulaThemeColor, "NebulaColorCorrection"
+            local a = Instance.new("Atmosphere", lighting) a.Density, a.Offset, a.Glare, a.Haze, a.Color, a.Decay, a.Name = 0.4, 0.25, 1, 2, nebulaThemeColor, Color3.fromRGB(25, 25, 112), "NebulaAtmosphere"
             lighting.Ambient, lighting.OutdoorAmbient = nebulaThemeColor, nebulaThemeColor
             lighting.FogStart, lighting.FogEnd = 100, 500
             lighting.FogColor = nebulaThemeColor
         else
             for _, v in pairs({"NebulaBloom", "NebulaColorCorrection", "NebulaAtmosphere"}) do
-                local obj = lighting:FindFirstChild(v) 
-                if obj then obj:Destroy() end
+                local obj = lighting:FindFirstChild(v) if obj then obj:Destroy() end
             end
             lighting.Ambient, lighting.OutdoorAmbient = originalAmbient, originalOutdoorAmbient
             lighting.FogStart, lighting.FogEnd = originalFogStart, originalFogEnd
             lighting.FogColor = originalFogColor
         end
     end,
-})
-
-worldbox:AddLabel("Nebula Color")
-    :AddColorPicker("nebula_color_picker", {
-        Default = Color3.fromRGB(173, 216, 230),
-        Callback = function(c)
-            nebulaThemeColor = c
-            if nebulaEnabled then
-                local nc = lighting:FindFirstChild("NebulaColorCorrection") 
-                if nc then nc.TintColor = c end
-
-                local na = lighting:FindFirstChild("NebulaAtmosphere") 
-                if na then na.Color = c end
-
-                lighting.Ambient, lighting.OutdoorAmbient = c, c
-                lighting.FogColor = c
-            end
+}):AddColorPicker("nebula_color_picker", {
+    Text = "Nebula Color", Default = Color3.fromRGB(173, 216, 230),
+    Callback = function(c)
+        nebulaThemeColor = c
+        if nebulaEnabled then
+            local nc = lighting:FindFirstChild("NebulaColorCorrection") if nc then nc.TintColor = c end
+            local na = lighting:FindFirstChild("NebulaAtmosphere") if na then na.Color = c end
+            lighting.Ambient, lighting.OutdoorAmbient = c, c
+            lighting.FogColor = c
         end
-    })
-
+    end,
+})
 
 
 local Lighting = game:GetService("Lighting")
@@ -1817,93 +1760,6 @@ WarTycoonBox:AddToggle("Master Toggle", {
     Callback = enableMasterToggle
 })
 
-local hookEnabled = false
-local oldNamecall
-
-local function enableBulletHitManipulation(value)
-    if not masterToggle then return end
-    BManipulation = value
-    local remote = game:GetService("ReplicatedStorage").BulletFireSystem.BulletHit
-
-    if BManipulation then
-        if not hookEnabled then
-            hookEnabled = true
-            oldNamecall = hookmetamethod(remote, "__namecall", newcclosure(function(self, ...)
-                if typeof(self) == "Instance" then
-                    local method = getnamecallmethod()
-                    if method and (method == "FireServer" and self == remote) then
-                        local HitPart = getClosestPlayer()
-                        if HitPart then
-                            local remArgs = {...}
-                            remArgs[2] = HitPart
-                            remArgs[3] = HitPart.Position
-                            setnamecallmethod(method)
-                            return oldNamecall(self, unpack(remArgs))
-                        else
-                            setnamecallmethod(method)
-                        end
-                    end
-                end
-                return oldNamecall(self, ...)
-            end))
-        end
-    else
-        BsManipulation = false
-        if hookEnabled then
-            hookEnabled = false
-            if oldNamecall then
-                hookmetamethod(remote, "__namecall", oldNamecall)
-            end
-        end
-    end
-end
-
-WarTycoonBox:AddToggle("BulletHit manipulation", {
-    Text = "Magic Bullet [beta]",
-    Default = false,
-    Tooltip = "Magic Bullet?",
-    Callback = function(value)
-        enableBulletHitManipulation(value)
-    end
-})
-
-local hookEnabled = false
-local oldNamecall
-
-local function enableRocketHitManipulation(value)
-    if not masterToggle then return end
-    RManipulation = value
-    local remote = game:GetService("ReplicatedStorage").RocketSystem.Events.RocketHit
-
-    if RManipulation and not hookEnabled then
-        hookEnabled = true
-        oldNamecall = hookmetamethod(remote, "__namecall", newcclosure(function(self, ...)
-            if typeof(self) == "Instance" and getnamecallmethod() == "FireServer" and self == remote then
-                local remArgs = {...}
-                local targetPart = getClosestPlayer()
-                if targetPart then
-                    remArgs[1] = targetPart.Position
-                    remArgs[2] = (targetPart.Position - game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.Position).unit
-                    remArgs[5] = targetPart
-                    setnamecallmethod("FireServer")
-                    return oldNamecall(self, unpack(remArgs))
-                end
-            end
-            return oldNamecall(self, ...)
-        end))
-    elseif not RManipulation and hookEnabled then
-        hookEnabled = false
-        if oldNamecall then hookmetamethod(remote, "__namecall", oldNamecall) end
-    end
-end
-
-WarTycoonBox:AddToggle("RocketHit manipulation", {
-    Text = "Magic Rocket",
-    Default = false,
-    Tooltip = "Enables Magic Rocket manipulation",
-    Callback = enableRocketHitManipulation
-})
-
 local function modifyWeaponSettings(property, value)
     local function findSettingsModule(parent)
         for _, child in pairs(parent:GetChildren()) do
@@ -1924,6 +1780,8 @@ local function modifyWeaponSettings(property, value)
     local player = game:GetService("Players").LocalPlayer
     local backpack = player:WaitForChild("Backpack")
     local character = player.Character or player.CharacterAdded:Wait()
+    local foundModules = {}
+
 
     local function findSettingsInWarTycoon(item)
         local weaponName = item.Name
@@ -1934,50 +1792,138 @@ local function modifyWeaponSettings(property, value)
         return nil
     end
 
-    local function applyAttribute(weapon)
-        if weapon and weapon:IsA("Tool") then
-            pcall(function()
-                weapon:SetAttribute(property, value)
-            end)
-        end
-    end
-
-    local function applyRequireModule(settingsModule)
-        if settingsModule then
-            local success, module = pcall(function() return require(settingsModule) end)
-            if success and module[property] ~= nil then
-                module[property] = value
+    if getgenv().WarTycoon then
+        if getgenv().WeaponOnHands then
+            local toolInHand = character:FindFirstChildOfClass("Tool")
+            if toolInHand then
+                local settingsModule = findSettingsInWarTycoon(toolInHand)
+                if settingsModule then
+                    local success, module = pcall(function() return require(settingsModule) end)
+                    if success and module[property] ~= nil then
+                        module[property] = value
+                    end
+                end
             end
-        end
-    end
-
-    local useAttribute = getgenv().WeaponModifyMethod == "Attribute"
-
-    local function processWeapon(weapon)
-        if useAttribute then
-            applyAttribute(weapon)
         else
-            local settingsModule
-            if getgenv().WarTycoon then
-                settingsModule = findSettingsInWarTycoon(weapon)
-            else
-                settingsModule = findSettingsModule(weapon)
+            for _, item in pairs(backpack:GetChildren()) do
+                local settingsModule = findSettingsInWarTycoon(item)
+                if settingsModule then
+                    local success, module = pcall(function() return require(settingsModule) end)
+                    if success and module[property] ~= nil then
+                        module[property] = value
+                    end
+                end
             end
-            applyRequireModule(settingsModule)
-        end
-    end
-
-    if getgenv().WeaponOnHands then
-        local toolInHand = character:FindFirstChildOfClass("Tool")
-        if toolInHand then
-            processWeapon(toolInHand)
         end
     else
-        for _, item in pairs(backpack:GetChildren()) do
-            processWeapon(item)
+        if getgenv().WeaponOnHands then
+            local toolInHand = character:FindFirstChildOfClass("Tool")
+            if toolInHand then
+                local settingsModule = findSettingsModule(toolInHand)
+                if settingsModule then
+                    local success, module = pcall(function() return require(settingsModule) end)
+                    if success and module[property] ~= nil then
+                        module[property] = value
+                    end
+                end
+            end
+        else
+            for _, item in pairs(backpack:GetChildren()) do
+                local settingsModule = findSettingsModule(item)
+                if settingsModule then
+                    local success, module = pcall(function() return require(settingsModule) end)
+                    if success and module[property] ~= nil then
+                        module[property] = value
+                    end
+                end
+            end
         end
     end
 end
+
+ACSEngineBox:AddToggle("WarTycoon", {
+    Text = "War Tycoon",
+    Default = false,
+    Tooltip = "Enable War Tycoon mode to search for weapon settings in ACS_Guns.",
+    Callback = function(value)
+        getgenv().WarTycoon = value
+    end
+})
+
+ACSEngineBox:AddToggle("WeaponOnHands", {
+    Text = "Weapon In Hands",
+    Default = false,
+    Tooltip = "Apply changes only to the weapon in hands if enabled.",
+    Callback = function(value)
+        getgenv().WeaponOnHands = value
+    end
+})
+
+ACSEngineBox:AddButton('INF AMMO', function()
+    modifyWeaponSettings("Ammo", math.huge)
+end)
+
+ACSEngineBox:AddButton('NO RECOIL | NO SPREAD', function()
+    modifyWeaponSettings("VRecoil", {0, 0})
+    modifyWeaponSettings("HRecoil", {0, 0})
+    modifyWeaponSettings("MinSpread", 0)
+    modifyWeaponSettings("MaxSpread", 0)
+    modifyWeaponSettings("RecoilPunch", 0)
+    modifyWeaponSettings("AimRecoilReduction", 0)
+end)
+
+ACSEngineBox:AddButton('INF BULLET DISTANCE', function()
+    modifyWeaponSettings("Distance", 25000)
+end)
+
+ACSEngineBox:AddInput("BulletSpeedInput", {
+    Text = "Bullet Speed",
+    Default = "10000",
+    Tooltip = "Set the bullet speed",
+    Callback = function(value)
+        getgenv().bulletSpeedValue = tonumber(value) or 10000
+    end
+})
+
+ACSEngineBox:AddButton('CHANGE BULLET SPEED', function()
+    modifyWeaponSettings("BSpeed", getgenv().bulletSpeedValue or 10000)
+    modifyWeaponSettings("MuzzleVelocity", getgenv().bulletSpeedValue or 10000)
+end)
+
+local fireRateInput
+fireRateInput = ACSEngineBox:AddInput('FireRateInput', {
+    Text = 'Enter Fire Rate',
+    Default = '8888',
+    Tooltip = 'Type the fire rate value you want to apply.',
+})
+
+ACSEngineBox:AddButton('CHANGE FIRE RATE', function()
+    modifyWeaponSettings("FireRate", tonumber(fireRateInput.Value) or 8888)
+    modifyWeaponSettings("ShootRate", tonumber(fireRateInput.Value) or 8888)
+end)
+
+local bulletsInput = ACSEngineBox:AddInput('BulletsInput', {
+    Text = 'Enter Bullets',
+    Default = '50',
+    Tooltip = 'Type the number of bullets you want to apply.',
+    Numeric = true
+})
+
+ACSEngineBox:AddButton('MULTI BULLETS', function()
+    local bulletsValue = tonumber(Options.BulletsInput.Value) or 50
+    modifyWeaponSettings("Bullets", bulletsValue)
+end)
+
+local inputField
+inputField = ACSEngineBox:AddInput('FireModeInput', {
+    Text = 'Enter Fire Mode',
+    Default = 'Auto',
+    Tooltip = 'Type the fire mode you want to apply.',
+})
+
+ACSEngineBox:AddButton('CHANGE FIRE MODE', function()
+    modifyWeaponSettings("Mode", inputField.Value or 'Auto')
+end)
 
 --not final code need optimize FindFirstChild... Cuz can make FinFirstChilde true withous find 1 and find 2 only find 1
 local Players = game:GetService("Players")
@@ -2150,219 +2096,91 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-local isQuickLagRPGExecuting = false
+local WarTycoonDead = ExploitTab:AddLeftGroupbox("Tank/Vehicle modifier")
 
-local function startQuickLagRPG()
-    if not masterToggle then return end
-    local camera, playerName = workspace.Camera, game:GetService("Players").LocalPlayer.Name
-    local repeatCount = 500
+local selectedProperty = "FireRate"
+local propertyValue = 1
+local turretSettingsModule
+local nearestVehicle
 
-    local validWeapons = {"RPG", "Javelin", "Stinger"}
+local propertyDropdown = WarTycoonDead:AddDropdown("PropertyDropdown", {
+    Values = {"FireRate","OverHeatCount","ColdownTime","DepleteDelay","OverheatIncrement","BulletSpeed"},
+    Default = selectedProperty,
+    Multi = false,
+    Text = "Select Property"
+})
+propertyDropdown:OnChanged(function(value)
+    selectedProperty = value
+end)
 
-    local function getActiveWeapon()
-        for _, weaponName in ipairs(validWeapons) do
-            local weapon = workspace[playerName]:FindFirstChild(weaponName)
-            if weapon and weapon:IsA("Tool") and weapon.Parent == workspace[playerName] then
-                return weaponName
+local valueInput = WarTycoonDead:AddInput('ValueInput', {
+    Text='Value',
+    Default=tostring(propertyValue),
+    Tooltip='Enter value'
+})
+valueInput:OnChanged(function(value)
+    local num = tonumber(value)
+    if num then
+        propertyValue = num
+    end
+end)
+
+local function getNearestVehicle()
+    if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) then return nil end
+    local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
+    local vehicleWorkspaces = {
+        Workspace["Game Systems"]:FindFirstChild("Vehicle Workspace"),
+        Workspace["Game Systems"]:FindFirstChild("Tank Workspace")
+    }
+    local shortestDist, nearest = math.huge, nil
+    for _, ws in pairs(vehicleWorkspaces) do
+        if ws then
+            for _, v in pairs(ws:GetChildren()) do
+                if v:IsA("Model") then
+                    local posPart = v:FindFirstChildWhichIsA("BasePart")
+                    if posPart then
+                        local dist = (posPart.Position - playerPos).Magnitude
+                        if dist < shortestDist then
+                            shortestDist, nearest = dist, v
+                        end
+                    end
+                end
             end
         end
-        return nil
     end
-
-    local function fireQuickLagRocket(weaponName)
-        if not weaponName then return end
-
-        local fireRocketVector = camera.CFrame.LookVector
-        local fireRocketPosition = camera.CFrame.Position
-        game:GetService("ReplicatedStorage").RocketSystem.Events.FireRocket:InvokeServer(
-            fireRocketVector, workspace[playerName][weaponName], workspace[playerName][weaponName], fireRocketPosition
-        )
-
-        local fireRocketClientTable = {
-            ["expShake"] = {["fadeInTime"] = 0.05, ["magnitude"] = 3, ["rotInfluence"] = {0.4, 0, 0.4}, ["fadeOutTime"] = 0.5, ["posInfluence"] = {1, 1, 0}, ["roughness"] = 3},
-            ["gravity"] = Vector3.new(0, -20, 0), ["HelicopterDamage"] = 450, ["FireRate"] = 15, ["VehicleDamage"] = 350, ["ExpName"] = "Rocket",
-            ["RocketAmount"] = 1, ["ExpRadius"] = 12, ["BoatDamage"] = 300, ["TankDamage"] = 300, ["Acceleration"] = 8, ["ShieldDamage"] = 11170,
-            ["Distance"] = 4000, ["PlaneDamage"] = 500, ["GunshipDamage"] = 170, ["velocity"] = 200, ["ExplosionDamage"] = 120
-        }
-
-        local fireRocketClientInstance1 = game:GetService("ReplicatedStorage").RocketSystem.Rockets["RPG Rocket"]
-        local fireRocketClientInstance2 = workspace[playerName][weaponName]
-        local fireRocketClientInstance3 = workspace[playerName][weaponName]
-        game:GetService("ReplicatedStorage").RocketSystem.Events.FireRocketClient:Fire(
-            camera.CFrame.Position, camera.CFrame.LookVector, fireRocketClientTable, fireRocketClientInstance1, fireRocketClientInstance2, fireRocketClientInstance3,
-            game:GetService("Players").LocalPlayer, nil, { [1] = workspace[playerName]:FindFirstChild(weaponName) }
-        )
-    end
-
-    local activeWeapon = getActiveWeapon()
-    if activeWeapon then
-        for i = 1, repeatCount do
-            task.spawn(fireQuickLagRocket, activeWeapon)
-        end
-    else
-        warn("No active weapon: RPG | JAVELIN | STINGER")
-    end
+    nearestVehicle = nearest
+    return nearest
 end
 
-WarTycoonBox:AddToggle("Quick Lag RPG", {
-    Text = "Quick Lag rocket",
-    Default = false,
-    Tooltip = "Enable or disable Quick Lag rocket.",
-    Callback = function(value)
-        if value then
-            if not isQuickLagRPGExecuting then
-                isQuickLagRPGExecuting = true
-                startQuickLagRPG()
-            end
-        else
-            isQuickLagRPGExecuting = false
-        end
-    end,
-}):AddKeyPicker("Quick Lag rocket Key", {
-    Default = "I",
-    Mode = "Toggle",
-    Text = "Quick Lag rocket Key",
-    Tooltip = "Key to toggle Quick Lag rocket",
-    Callback = function()
-        if not isQuickLagRPGExecuting then
-            isQuickLagRPGExecuting = true
-            startQuickLagRPG()
-        else
-            isQuickLagRPGExecuting = false
-        end
-    end,
-})
-
-local antiLagConnection
-
-WarTycoonBox:AddToggle("AntiLag", {
-    Text = "Anti-Lag",
-    Default = false,
-    Tooltip = "Removing all VisualRockets",
-    Callback = function(value)
-        if not enableMasterToggle then
-            if antiLagConnection then
-                antiLagConnection:Disconnect()
-                antiLagConnection = nil
-            end
-            return
-        end
-
-        if value then
-            local visualRocketsFolder = workspace:WaitForChild("VisualRockets")
-            for _, object in ipairs(visualRocketsFolder:GetChildren()) do
-                object:Destroy()
-            end
-            antiLagConnection = visualRocketsFolder.ChildAdded:Connect(function(newObject)
-                newObject:Destroy()
-            end)
-
-        else
-            if antiLagConnection then
-                antiLagConnection:Disconnect()
-                antiLagConnection = nil
+local function findTurretSettings(vehicle)
+    if vehicle and vehicle:FindFirstChild("Misc") then
+        local turrets = vehicle.Misc:FindFirstChild("Turrets")
+        if turrets then
+            for _, wf in pairs(turrets:GetChildren()) do
+                for _, tf in pairs(wf:GetChildren()) do
+                    local settingsModule = tf:FindFirstChild("Settings")
+                    if settingsModule and settingsModule:IsA("ModuleScript") then
+                        turretSettingsModule = settingsModule
+                        return settingsModule
+                    end
+                end
             end
         end
     end
-})
+    return nil
+end
 
-ACSEngineBox:AddToggle("WarTycoon", {
-    Text = "War Tycoon",
-    Default = false,
-    Tooltip = "Enable War Tycoon mode to search for weapon settings in ACS_Guns.",
-    Callback = function(value)
-        getgenv().WarTycoon = value
-    end
-})
+local function modifyWeaponSettings()
+    turretSettingsModule = turretSettingsModule or findTurretSettings(nearestVehicle or getNearestVehicle())
+    pcall(function()
+        local settingsTable = require(turretSettingsModule)
+        if settingsTable[selectedProperty] ~= nil then
+            settingsTable[selectedProperty] = propertyValue
+        end
+    end)
+end
 
-ACSEngineBox:AddToggle("WeaponOnHands", {
-    Text = "Weapon In Hands",
-    Default = false,
-    Tooltip = "Apply changes only to the weapon in hands if enabled.",
-    Callback = function(value)
-        getgenv().WeaponOnHands = value
-    end
-})
-
-ACSEngineBox:AddDropdown("WeaponModifyMethod", {
-    Text = "Weapon Modify Method",
-    Default = "Attribute",
-    Values = {"Attribute", "Require"},
-    Tooltip = "Choose how to modify weapon settings",
-    Callback = function(value)
-        getgenv().WeaponModifyMethod = value
-    end
-})
-
-ACSEngineBox:AddButton('INF AMMO', function()
-    modifyWeaponSettings("Ammo", math.huge)
-end)
-
-ACSEngineBox:AddButton('NO RECOIL | NO SPREAD', function()
-    if getgenv().WeaponModifyMethod == "Attribute" then
-        modifyWeaponSettings("VRecoil", Vector2.new(0, 0))
-        modifyWeaponSettings("HRecoil", Vector2.new(0, 0))
-    else
-        modifyWeaponSettings("VRecoil", {0, 0})
-        modifyWeaponSettings("HRecoil", {0, 0})
-    end
-    modifyWeaponSettings("MinSpread", 0)
-    modifyWeaponSettings("MaxSpread", 0)
-    modifyWeaponSettings("RecoilPunch", 0)
-    modifyWeaponSettings("AimRecoilReduction", 0)
-end)
-
-ACSEngineBox:AddButton('INF BULLET DISTANCE', function()
-    modifyWeaponSettings("Distance", 25000)
-end)
-
-ACSEngineBox:AddInput("BulletSpeedInput", {
-    Text = "Bullet Speed",
-    Default = "10000",
-    Tooltip = "Set the bullet speed",
-    Callback = function(value)
-        getgenv().bulletSpeedValue = tonumber(value) or 10000
-    end
-})
-
-ACSEngineBox:AddButton('CHANGE BULLET SPEED', function()
-    modifyWeaponSettings("BSpeed", getgenv().bulletSpeedValue or 10000)
-    modifyWeaponSettings("MuzzleVelocity", getgenv().bulletSpeedValue or 10000)
-end)
-
-local fireRateInput = ACSEngineBox:AddInput('FireRateInput', {
-    Text = 'Enter Fire Rate',
-    Default = '8888',
-    Tooltip = 'Type the fire rate value you want to apply.',
-})
-
-ACSEngineBox:AddButton('CHANGE FIRE RATE', function()
-    local rate = tonumber(fireRateInput.Value) or 8888
-    modifyWeaponSettings("FireRate", rate)
-    modifyWeaponSettings("ShootRate", rate)
-end)
-
-local bulletsInput = ACSEngineBox:AddInput('BulletsInput', {
-    Text = 'Enter Bullets',
-    Default = '50',
-    Tooltip = 'Type the number of bullets you want to apply.',
-    Numeric = true
-})
-
-ACSEngineBox:AddButton('MULTI BULLETS', function()
-    local bulletsValue = tonumber(bulletsInput.Value) or 50
-    modifyWeaponSettings("Bullets", bulletsValue)
-end)
-
-local inputField = ACSEngineBox:AddInput('FireModeInput', {
-    Text = 'Enter Fire Mode',
-    Default = 'Auto',
-    Tooltip = 'Type the fire mode you want to apply.',
-})
-
-ACSEngineBox:AddButton('CHANGE FIRE MODE', function()
-    modifyWeaponSettings("Mode", inputField.Value or 'Auto')
-end)
+WarTycoonDead:AddButton('APPLY PROPERTY', modifyWeaponSettings)
 
 local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
 local strafeEnabled = false
