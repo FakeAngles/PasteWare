@@ -708,7 +708,8 @@ Main:AddDropdown("Method", {
         "ScreenPointToRay",
         "Raycast",
         "FindPartOnRay",
-        "FindPartOnRayWithIgnoreList"
+        "FindPartOnRayWithIgnoreList",
+        "CounterBlox"
     }
 }):OnChanged(function() 
     SilentAimSettings.SilentAimMethod = Options.Method.Value 
@@ -989,32 +990,31 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                 end
                 return Origin, getDirection(Origin, HitPart.Position)
             end
-
-            if Method == "FindPartOnRayWithIgnoreList" and Options.Method.Value == Method then
+            if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
                 if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
                     local Origin, Direction = modifyRay(Arguments[2].Origin)
                     Arguments[2] = Ray.new(Origin, Direction * SilentAimSettings.MultiplyUnitBy)
                     return oldNamecall(unpack(Arguments))
                 end
-            elseif Method == "FindPartOnRayWithWhitelist" and Options.Method.Value == Method then
+            elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
                 if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
                     local Origin, Direction = modifyRay(Arguments[2].Origin)
                     Arguments[2] = Ray.new(Origin, Direction * SilentAimSettings.MultiplyUnitBy)
                     return oldNamecall(unpack(Arguments))
                 end
-            elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and Options.Method.Value:lower() == Method:lower() then
+            elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
                 if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
                     local Origin, Direction = modifyRay(Arguments[2].Origin)
                     Arguments[2] = Ray.new(Origin, Direction * SilentAimSettings.MultiplyUnitBy)
                     return oldNamecall(unpack(Arguments))
                 end
-            elseif Method == "Raycast" and Options.Method.Value == Method then
+            elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
                 if ValidateArguments(Arguments, ExpectedArguments.Raycast) then
                     local Origin, Direction = modifyRay(Arguments[2])
                     Arguments[2], Arguments[3] = Origin, Direction * SilentAimSettings.MultiplyUnitBy
                     return oldNamecall(unpack(Arguments))
                 end
-            elseif Method == "ViewportPointToRay" and Options.Method.Value == Method then
+            elseif Method == "ViewportPointToRay" and SilentAimSettings.SilentAimMethod == Method then
                 if ValidateArguments(Arguments, ExpectedArguments.ViewportPointToRay) then
                     local Origin = Camera.CFrame.p
                     if SilentAimSettings.BulletTP then
@@ -1023,7 +1023,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                     Arguments[2] = Camera:WorldToScreenPoint(HitPart.Position)
                     return Ray.new(Origin, (HitPart.Position - Origin).Unit * SilentAimSettings.MultiplyUnitBy)
                 end
-            elseif Method == "ScreenPointToRay" and Options.Method.Value == Method then
+            elseif Method == "ScreenPointToRay" and SilentAimSettings.SilentAimMethod == Method then
                 if ValidateArguments(Arguments, ExpectedArguments.ScreenPointToRay) then
                     local Origin = Camera.CFrame.p
                     if SilentAimSettings.BulletTP then
@@ -1032,6 +1032,10 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
                     Arguments[2] = Camera:WorldToScreenPoint(HitPart.Position)
                     return Ray.new(Origin, (HitPart.Position - Origin).Unit * SilentAimSettings.MultiplyUnitBy)
                 end
+            elseif Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == "CounterBlox" then
+                local Origin, Direction = modifyRay(Arguments[2].Origin)
+                Arguments[2] = Ray.new(Origin, Direction * SilentAimSettings.MultiplyUnitBy)
+                return oldNamecall(unpack(Arguments))
             end
         end
     end
@@ -2348,4 +2352,3 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
-
