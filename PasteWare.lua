@@ -2130,31 +2130,6 @@ valueInput:OnChanged(function(value)
     end
 end)
 
-local WarTycoonDead = ExploitTab:AddLeftGroupbox("Tank/Vehicle modifier")
-local properties = {"FireRate","OverHeatCount","ColdownTime","DepleteDelay","OverheatIncrement","BulletSpeed"}
-
-local propertyDropdown = WarTycoonDead:AddDropdown("PropertyDropdown", {
-    Values = properties,
-    Default = getgenv().ScriptState.vehiclePropertySelected,
-    Multi = false,
-    Text = "Select Property"
-})
-propertyDropdown:OnChanged(function(value)
-    getgenv().ScriptState.vehiclePropertySelected = value
-end)
-
-local valueInput = WarTycoonDead:AddInput('ValueInput', {
-    Text='Value',
-    Default=tostring(getgenv().ScriptState.vehiclePropertyValue),
-    Tooltip='Enter value'
-})
-valueInput:OnChanged(function(value)
-    local num = tonumber(value)
-    if num then
-        getgenv().ScriptState.vehiclePropertyValue = num
-    end
-end)
-
 function getNearestVehicle()
     if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) then return nil end
     local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
@@ -2375,3 +2350,4 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
