@@ -369,6 +369,22 @@ ScreenGui.Parent = game.CoreGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 OpenButton.Parent = ScreenGui
+OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) 
+OpenButton.Size = UDim2.new(0, 80, 0, 30)
+OpenButton.Position = UDim2.new(1, 100, 0.5, -15) 
+OpenButton.Text = "menu"
+OpenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+OpenButton.Font = Enum.Font.Code
+OpenButton.TextSize = 14
+OpenButton.BorderSizePixel = 0
+OpenButton.Active = true
+
+local ScreenGui = Instance.new("ScreenGui")
+local OpenButton = Instance.new("TextButton")
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+OpenButton.Parent = ScreenGui
 OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 OpenButton.Size = UDim2.new(0, 80, 0, 30)
 OpenButton.Position = UDim2.new(1, -100, 0.5, -15)
@@ -381,7 +397,7 @@ OpenButton.Active = true
 
 local UIStroke = Instance.new("UIStroke")
 UIStroke.Thickness = 1.5
-UIStroke.Color = Color3.fromRGB(0, -110, 255)
+UIStroke.Color = Color3.fromRGB(0, 110, 255)
 UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 UIStroke.Parent = OpenButton
 
@@ -417,6 +433,12 @@ end)
 OpenButton.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
         dragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
     end
 end)
 
@@ -2352,3 +2374,4 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
+
