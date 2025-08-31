@@ -353,38 +353,6 @@ ScreenGui.Parent = game.CoreGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 OpenButton.Parent = ScreenGui
-OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) 
-OpenButton.Size = UDim2.new(0, 80, 0, 30)
-OpenButton.Position = UDim2.new(1, 100, 0.5, -15) 
-OpenButton.Text = "menu"
-OpenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-OpenButton.Font = Enum.Font.Code
-OpenButton.TextSize = 14
-OpenButton.BorderSizePixel = 0
-OpenButton.Active = true
-
-local ScreenGui = Instance.new("ScreenGui")
-local OpenButton = Instance.new("TextButton")
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-OpenButton.Parent = ScreenGui
-OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25) 
-OpenButton.Size = UDim2.new(0, 80, 0, 30)
-OpenButton.Position = UDim2.new(1, 100, 0.5, -15) 
-OpenButton.Text = "menu"
-OpenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-OpenButton.Font = Enum.Font.Code
-OpenButton.TextSize = 14
-OpenButton.BorderSizePixel = 0
-OpenButton.Active = true
-
-local ScreenGui = Instance.new("ScreenGui")
-local OpenButton = Instance.new("TextButton")
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-OpenButton.Parent = ScreenGui
 OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 OpenButton.Size = UDim2.new(0, 80, 0, 30)
 OpenButton.Position = UDim2.new(1, -100, 0.5, -15)
