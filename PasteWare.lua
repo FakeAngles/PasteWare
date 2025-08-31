@@ -2130,12 +2130,38 @@ valueInput:OnChanged(function(value)
     end
 end)
 
+local WarTycoonDead = ExploitTab:AddLeftGroupbox("Tank/Vehicle modifier")
+local properties = {"FireRate","OverHeatCount","ColdownTime","DepleteDelay","OverheatIncrement","BulletSpeed"}
+
+local propertyDropdown = WarTycoonDead:AddDropdown("PropertyDropdown", {
+    Values = properties,
+    Default = getgenv().ScriptState.vehiclePropertySelected,
+    Multi = false,
+    Text = "Select Property"
+})
+propertyDropdown:OnChanged(function(value)
+    getgenv().ScriptState.vehiclePropertySelected = value
+end)
+
+local valueInput = WarTycoonDead:AddInput('ValueInput', {
+    Text='Value',
+    Default=tostring(getgenv().ScriptState.vehiclePropertyValue),
+    Tooltip='Enter value'
+})
+valueInput:OnChanged(function(value)
+    local num = tonumber(value)
+    if num then
+        getgenv().ScriptState.vehiclePropertyValue = num
+    end
+end)
+
 function getNearestVehicle()
     if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) then return nil end
     local playerPos = LocalPlayer.Character.HumanoidRootPart.Position
     local vehicleWorkspaces = {
         Workspace["Game Systems"]:FindFirstChild("Vehicle Workspace"),
-        Workspace["Game Systems"]:FindFirstChild("Tank Workspace")
+        Workspace["Game Systems"]:FindFirstChild("Tank Workspace"),
+        Workspace["Game Systems"]:FindFirstChild("Plane Workspace")
     }
     local shortestDist = math.huge
     local nearest = nil
@@ -2159,35 +2185,44 @@ function getNearestVehicle()
     return nearest
 end
 
-function findTurretSettings(vehicle)
-    if vehicle and vehicle:FindFirstChild("Misc") then
-        local turrets = vehicle.Misc:FindFirstChild("Turrets")
-        if turrets then
-            for _, wf in pairs(turrets:GetChildren()) do
-                for _, tf in pairs(wf:GetChildren()) do
-                    local settingsModule = tf:FindFirstChild("Settings")
-                    if settingsModule and settingsModule:IsA("ModuleScript") then
-                        getgenv().ScriptState.turretSettingsModule = settingsModule
-                        return settingsModule
-                    end
-                end
-            end
+function findAllSettingsModules(vehicle)
+    local settingsModules = {}
+    if not vehicle then return settingsModules end
+    
+    local function searchForSettingsModules(object)
+        if object:IsA("ModuleScript") and object.Name == "Settings" then
+            table.insert(settingsModules, object)
+        end
+        for _, child in pairs(object:GetChildren()) do
+            searchForSettingsModules(child)
         end
     end
-    return nil
+    
+    searchForSettingsModules(vehicle)
+    return settingsModules
 end
 
-function modifyWeaponSettings()
-    getgenv().ScriptState.turretSettingsModule = getgenv().ScriptState.turretSettingsModule or findTurretSettings(getgenv().ScriptState.nearestVehicle or getNearestVehicle())
-    pcall(function()
-        local settingsTable = require(getgenv().ScriptState.turretSettingsModule)
-        if settingsTable[getgenv().ScriptState.vehiclePropertySelected] ~= nil then
-            settingsTable[getgenv().ScriptState.vehiclePropertySelected] = getgenv().ScriptState.vehiclePropertyValue
-        end
-    end)
+function modifyAllVehicleSettings()
+    local vehicle = getgenv().ScriptState.nearestVehicle or getNearestVehicle()
+    if not vehicle then return end
+    
+    local settingsModules = findAllSettingsModules(vehicle)
+    local property = getgenv().ScriptState.vehiclePropertySelected
+    local value = getgenv().ScriptState.vehiclePropertyValue
+    
+    if #settingsModules == 0 then return end
+    
+    for _, settingsModule in pairs(settingsModules) do
+        pcall(function()
+            local success, settingsTable = pcall(require, settingsModule)
+            if success and type(settingsTable) == "table" and settingsTable[property] ~= nil then
+                settingsTable[property] = value
+            end
+        end)
+    end
 end
 
-WarTycoonDead:AddButton('APPLY PROPERTY', modifyWeaponSettings)
+WarTycoonDead:AddButton('APPLY PROPERTY', modifyAllVehicleSettings)
 
 local targetStrafe = GeneralTab:AddLeftGroupbox("Target Strafe")
 ScriptState.strafeSpeed, ScriptState.strafeRadius = 50, 5
@@ -2340,4 +2375,3 @@ while true do
 end
 
 ThemeManager:LoadDefaultTheme()
-
